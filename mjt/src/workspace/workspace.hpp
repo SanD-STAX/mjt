@@ -9,6 +9,7 @@
 #include "mjbase/model/resource_container.hpp"
 #include "mjbase/project/edit_ledger_store.hpp"
 #include "i_workspace.hpp"
+#include "reference_scan.hpp"
 #include "workspace_types.hpp"
 
 namespace mjbase {
@@ -196,6 +197,11 @@ public:
 
     /// @brief 返回所有直接或结构性引用 internalName 的位置。
     WorkspaceResult<std::vector<ReferenceInfo>> xrefsToClass(const std::string& internalName) const override;
+
+    /// @brief 构建全量直接引用索引（主容器 + supporting JAR；畸形 class 跳过）。
+    ///
+    /// 值语义返回；`ReferenceSite` 的 sourceClass 可能是 supporting 中的类。
+    WorkspaceResult<ReferenceScan> referenceScan() const;
 
     /// @brief 返回方法的直接调用目标；resolved 为 true 时扩展虚调用和接口调用。
     WorkspaceResult<std::vector<ReferenceInfo>> calleesOfMethod(const std::string& owner,
