@@ -67,7 +67,7 @@ target("mjt-mcp")
     -- 被依赖在后），否则 auto 排序把 libca 包归档排到 mjt_shared 前，链接期
     -- 报 ca::process 等符号 undefined（Linux CI 实证）。闭包序与 unittest 同款。
      mjt_binary_link_closure("mjt_mcp_core", "mjt_shared", "mjbase")
-    mjt_binary_link_closure("libjhasm", "libjclassfile", "libjstr", "libjbc", "libjzip")
+    mjt_binary_link_closure("libjhasm", "libjclassfile", "libjstr", "libjbc", "libjzip", "sqlite3")
     add_files("mcp/src/main.cpp")
 
     set_rundir("$(projectdir)")
@@ -83,7 +83,7 @@ if has_config("with_tests") then
         -- xmake 3.x 不把静态 target 依赖传进 binary 链接：显式给全闭包，按
         -- 「消费者在前、被依赖在后」排序（与 mjt_mcp_unittest 同款）。
          mjt_binary_link_closure("mjt_shared", "mjbase")
-        mjt_binary_link_closure("libjhasm", "libjclassfile", "libjstr", "libjbc", "libjzip", "test_helper", "libjdk_finder")
+        mjt_binary_link_closure("libjhasm", "libjclassfile", "libjstr", "libjbc", "libjzip", "test_helper", "libjdk_finder", "sqlite3")
         add_files("test/workspace/*.cpp")
         set_rundir("$(projectdir)")
 
@@ -104,7 +104,7 @@ if has_config("with_tests") then
         -- xmake 3.x 不把静态 target 依赖传进 binary 链接：显式给全闭包，按
         -- 「消费者在前、被依赖在后」排序，另含 libmcp 及其 http/net/io 链。
          mjt_binary_link_closure("mjt_mcp_core", "mjt_shared", "mjbase")
-        mjt_binary_link_closure("libjhasm", "libjclassfile", "libjstr", "libjbc", "libjzip", "test_helper", "libjdk_finder")
+        mjt_binary_link_closure("libjhasm", "libjclassfile", "libjstr", "libjbc", "libjzip", "test_helper", "libjdk_finder", "sqlite3")
         -- 注：libca_i18n 为 headeronly target（无 .lib 产物），只入 add_deps 不入 add_links。
         add_includedirs("mcp/src")
         add_files("mcp/test/*.cpp")

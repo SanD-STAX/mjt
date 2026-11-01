@@ -2529,6 +2529,20 @@ WorkspaceResult<std::vector<ReferenceInfo>> WorkspaceBase::xrefsToClass(
     }
 }
 
+WorkspaceResult<ReferenceScan> WorkspaceBase::referenceScan() const
+{
+    WorkspaceErrorInfo status = ensureLoaded("scan references");
+    if (status.is_err()) return ca::core::Err(std::move(status));
+    try {
+        ReferenceScan scan;
+        scan.build(*analysisScanContainer());
+        return ca::core::Ok(std::move(scan));
+    }
+    catch (const std::exception& exception) {
+        return ca::core::Err(error(WorkspaceError::Internal, "scan references", exception.what()));
+    }
+}
+
 WorkspaceResult<std::vector<ReferenceInfo>> WorkspaceBase::calleesOfMethod(
     const std::string& owner, const std::string& name, const std::string& descriptor,
     bool resolved) const

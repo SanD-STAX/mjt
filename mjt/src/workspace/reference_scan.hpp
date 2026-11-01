@@ -94,6 +94,12 @@ public:
     /// 精确目标查询：编码目标为 owner/name/descriptor 的方法引用。
     std::vector<MethodReference> methodReferencesTo(const std::string& owner, const std::string& name,
                                                     const std::string& descriptor) const;
+    /// 全部方法引用（扫描顺序：class 遍历序 + 方法体程序顺序）。
+    const std::vector<MethodReference>& methodReferences() const noexcept { return methods_; }
+    /// 全部字段引用。
+    const std::vector<FieldReference>& fieldReferences() const noexcept { return fields_; }
+    /// 全部类型引用。
+    const std::vector<TypeReference>& typeReferences() const noexcept { return types_; }
     /// 来源方法查询：owner.name(descriptor) 方法体发出的全部方法引用。
     std::vector<MethodReference> methodReferencesFrom(const std::string& owner, const std::string& name,
                                                       const std::string& descriptor) const;
