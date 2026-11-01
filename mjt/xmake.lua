@@ -7,7 +7,7 @@ target("mjt_shared")
         add_cxflags("/utf-8", {tools = "cl"})
     end
 
-    add_deps("mjbase")
+    add_packages("mjbase", {public = true})
     add_packages("libjhasm")
 
     add_includedirs("src", {public = true})
@@ -26,7 +26,8 @@ target("mjt_mcp_core")
         add_cxflags("/utf-8", {tools = "cl"})
     end
 
-    add_deps("mjt_shared", "mjbase")
+    add_deps("mjt_shared")
+    add_packages("mjbase", {public = true})
     add_packages("libmcp", {public = true})
     add_packages("libca")
     add_packages("libjbc")

@@ -42,17 +42,6 @@ function mjt_binary_link_closure(...)
     end
 end
 
--- mjbase 单测闭包（与 mjbase 仓同名实现；本仓不编 mjbase_unittest，
--- 但 mjbase/mjbase/xmake.lua 在 with_tests 下会引用它）。
-function mjbase_binary_link_closure(...)
-    local libs = {...}
-    local unpack = table.unpack or unpack
-    add_links(unpack(libs))
-    if is_plat("linux") then
-        add_linkgroups(unpack(libs))
-    end
-end
-
 -- 禁用 RTTI：dynamic_cast 替换为 typed::cast<T>()。
 if is_plat("windows") then
     add_cxflags("/GR-", {tools = "cl"})
@@ -160,18 +149,11 @@ add_requireconfs("libjhasm.libca",                       {version = LUIOX_LIBCA_
 -- i18n/resources 构建规则内嵌（.lang add_files 规则，包安装产物不带规则）。
 includes("xmake/libca_rules.lua")
 
--- mjbase 基座：源码级依赖（默认兄弟目录 ../mjbase）。必须在 includes("mjt")
--- 之前：mjt 的 target 要在配置期就能引用 mjbase。mjbase 打包进 luiox-repo
--- 后可改为 add_requires("mjbase") 消费。
-option("mjbase_root")
-    set_default("../mjbase")
-    set_showmenu(true)
-    set_description("Path to the mjbase source tree.")
-option_end()
-
--- 首次干净配置时脚本加载早于 CLI 选项合并，get_config 可能为 nil：回退
--- 缺省兄弟目录，后续加载再吃已记录的配置值。
-includes(path.join(get_config("mjbase_root") or "../mjbase", "mjbase"))
+-- mjbase 基座：luiox-repo 包消费（git 直连 + commit 锁）。包词条按源仓根
+-- require 清单声明依赖；本仓 require 清单与其字面对齐（PR-A），消费图实例
+-- 单一。兄弟目录源码级依赖接线（--mjbase_root / CI checkout）已随切换拆除；
+-- mjbase 侧开发走包词条发版节奏。
+add_requires("mjbase 0.0.7")
 
 includes("test_helper")
 includes("mjt")
