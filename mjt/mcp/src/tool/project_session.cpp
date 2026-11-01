@@ -18,6 +18,10 @@
 
 #include "shared/status_convert.hpp"
 
+//mask 出口状态完整类型：~ProjectSession 在此实例化 unique_ptr<MaskExitState>
+//的删除器。
+#include "mask_exit.hpp"
+
 #if defined(_WIN32)
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN

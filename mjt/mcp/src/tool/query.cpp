@@ -15,6 +15,7 @@
 
 #include "decompiler_support.hpp"
 #include "json.hpp"
+#include "mask_exit.hpp"
 #include "shared/status_convert.hpp"
 #include "limits.hpp"
 #include "parser.hpp"
@@ -680,12 +681,29 @@ std::optional<Json> McpToolService::callWorkspaceQueryTool(
                                          }),
                         hitList.end());
         }
+        //出口遮蔽接线（#121 §4.5）：strings 行的 value（串常量与资源可打印
+        //串，不可信 jar 的对抗内容主通道）走统一求值器；utf8_* 形态行是
+        //结构性标识符（类名/描述符/成员名），不在内容遮蔽域（命名呈现归
+        //B3 LVT 策略）。老 bundle（无 analysis.mjdb）直通零漂移。
+        std::vector<std::string*> maskTargets;
+        if (op == "search_strings") {
+            for (auto& hit : hitList) {
+                if (hit.kind == "constant_pool_string" || hit.kind == "resource_string")
+                    maskTargets.push_back(&hit.value);
+            }
+        }
+        MaskExitSummary maskSummary;
+        if (!maskTargets.empty()) {
+            auto maskStatus = applyMaskExit(session, maskTargets, maskSummary);
+            if (maskStatus.is_err()) return toolError("mask exit failed", &maskStatus);
+        }
         Json values = Json::array();
         for (const auto& hit : hitList) values.push_back(searchHitJson(hit));
         Json paged;
         std::string pageError;
         if (!page(std::move(values), arguments, paged, pageError, searchRowKeys(op)))
             return toolError(pageError);
+        if (maskSummary.active) paged["mask"] = maskSummaryJson(maskSummary);
         return toolResult(std::move(paged));
     }
     if (op == "class_list") {
