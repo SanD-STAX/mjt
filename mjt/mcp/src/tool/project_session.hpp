@@ -19,6 +19,8 @@
 
 namespace mjt::mcp {
 
+class MaskExitState;
+
 ///@brief 一个已打开的分析会话：workspace 实例与其绑定的工程 bundle。
 ///
 ///工程接线（RFC 0001 P1）：每个会话都落在工程 bundle 上——显式工程目录或
@@ -79,6 +81,11 @@ struct ProjectSession final
     std::vector<MountedContainerRecord> mountedContainers;
     ///角色化容器栈（primary>library>runtime 解析序、shadowed 记录、角色遍历）。
     std::unique_ptr<mjbase::model::MountedContainerSet> containerStack;
+
+    ///mask 出口状态（#121 §4.5 出口遮蔽接线；惰性分配于首个掩蔽出口调用，
+    ///见 mask_exit.hpp 的 applyMaskExit）。析构面在 project_session.cpp
+    ///（完整类型可见处）。
+    std::unique_ptr<MaskExitState> maskExit;
 };
 
 ///@brief 打开工程会话：创建/复用 bundle、登记 primary 容器、绑定台账引擎。
