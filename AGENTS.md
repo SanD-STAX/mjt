@@ -2,7 +2,7 @@
 
 `mjt` 是 JVM 字节码工具单仓：`mjt/` 是产品线（MCP 服务器），`mjt-py/` 是嵌入
 Python SDK 组件（`--with_pysdk` 门控），`test_helper/` 是共享测试层。字节码基座
-是 mjbase（独立仓，兄弟目录源码级依赖，见「mjbase 基座」）。无仓内共享层：外部
+是 mjbase（独立仓，luiox-repo 包词条消费，见「mjbase 基座」）。无仓内共享层：外部
 依赖经 luiox-repo 中心包仓直连（libjbc 走项目内联包定义）。
 
 ## 命令
@@ -45,13 +45,15 @@ libjbytecode / libjblw 已全退役（B7 摘 libjblw，B8 8.7 摘 libjbytecode�
 
 ## mjbase 基座
 
-字节码基座是 **mjbase**（独立仓），本仓以兄弟目录源码级依赖消费：
+字节码基座是 **mjbase**（独立仓），本仓经 luiox-repo 包词条消费
+（`add_requires("mjbase")`，git 直连 + commit 锁；0.0.7 起含 analysis_db/
+sqlite3 面）：
 
-- **消费形态**：根 `xmake.lua` 的 `--mjbase_root` option（默认 `../mjbase`）在
-  `includes("mjt")` 之前把 `<mjbase_root>/mjbase` 纳入构建；`mjt` 与 `mjt-py`
-  都是它的消费方。配置/构建前需保证兄弟目录就位。
-- **包化方向**：mjbase 打包进 luiox-repo 后改为 `add_requires("mjbase")` 消费，
-  届时本节收缩为普通外部包说明。
+- **依赖对齐**：包词条按 mjbase 源仓根 require 清单声明依赖；本仓根的
+  libca/libjstr/libjzip/libjhasm 钉版必须与其字面对齐，版本不一致会在消费
+  图裂出双实例（链接期 LNK2019 同族根因）。
+- **升级节奏**：mjbase main 定版后在 luiox-repo 追加包词条（只追加不修改），
+  本仓再 bump `add_requires` 版本号；不再有兄弟目录源码级直连。
 
 ## 提交
 

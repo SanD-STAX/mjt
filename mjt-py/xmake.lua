@@ -49,7 +49,7 @@ if has_config("with_pysdk") then
         set_extension(".pyd")
         set_default(false)
 
-        add_deps("mjbase")
+        add_packages("mjbase")
         -- 包面全部经 mjbase public 包传导（libjbc/libjzip/libca/libjhasm/...
         -- 与 mjbase 同版本）：本仓内联 libjbc 包是旧组件版（libjstr 0.0.1 缺
         -- MUtf8StringRef 双参构造），显式 add_packages 会把旧 lib dir 排进
@@ -89,7 +89,7 @@ if has_config("with_pysdk") then
             set_group("mjt-py/test")
             set_default(false)
 
-            add_deps("mjbase")
+            add_packages("mjbase")
             add_packages("gtest")
             add_includedirs("src")
             add_includedirs(mjtSharedSrc)
@@ -125,7 +125,7 @@ if has_config("with_pysdk") then
         set_group("mjt-py/test")
         set_default(false)
 
-        add_deps("mjbase")
+        add_packages("mjbase")
         add_includedirs("src")
         add_includedirs(path.join(pyHome, "include"))
         add_linkdirs(path.join(pyHome, "libs"))
