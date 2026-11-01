@@ -124,26 +124,26 @@ add_repositories("luiox-repo https://github.com/luiox/luiox-repo.git")
 -- 家族包内声明的 libca 依赖无版本约束且是小模块超集（core,str,log,crypto,zip），
 -- 放任自解析会多出实例；消费方目标同名包去重后落到无 json 的实例时，
 -- 链接期 LNK2019 ca::json（D33 同族根因）。升级 libca 只改下面两行。
--- 0.0.15 = zip UTF-8 路径 + 解析器 locale 加固（家族包 0.0.2 即 libca 0.0.14
--- 对齐版，与其基线对齐消 skew）；env 模块为 libjdk_finder 0.1.1 所需。
-LUIOX_LIBCA_VERSION = "0.0.15"
+-- 0.0.16 = 与 mjbase main 及其包词条（0.0.5+）消费版本对齐，消两仓 skew。
+LUIOX_LIBCA_VERSION = "0.0.16"
 LUIOX_LIBCA_MODULES = "core,crypto,str,fs,env,io,json,net,http,process,opt,thread,log,zip,resources,i18n,test"
 add_requires("libca " .. LUIOX_LIBCA_VERSION, {configs = {modules = LUIOX_LIBCA_MODULES}})
 -- test 模块必须显式点名：test_helper 调用 ca::test::top_project_path()，
 -- 缺模块时链接期 undefined reference；包 on_load 按依赖闭包展开排序链接项。
--- luiox 家族直连包消费 0.0.2（libca 0.0.14 对齐版）。
+-- libjstr/libjzip/libjhasm 与 mjbase main 根 require 清单字面对齐（mjbase
+-- 包词条按同清单声明，消费图版本不一致会实例分裂）。
 add_requires("libmcp 0.1.0")
-add_requires("libjstr 0.0.2")
-add_requires("libjzip 0.0.2")
+add_requires("libjstr 0.0.3")
+add_requires("libjzip 0.0.3")
 add_requires("libjclassfile 0.0.2")
--- libjbc 走项目内联包定义（git 直连 + commit 锁，与 mjbase 同版本）：
+-- libjbc 走项目内联包定义（git 直连 + commit 锁，≥ mjbase 门控下界 0.4.22）：
 -- luiox-repo 的发布版落后于 mjbase 需要的面，且内联定义不吃 requireconfs，
 -- 其嵌套 libca 由定义内的 add_deps 钉到上面的单源版本。
 includes("xmake/packages/libjbc.lua")
 add_requires("libjbc 0.4.23")
 add_requires("libjstd 0.0.1")
 add_requires("libjdk_finder 0.1.1")
-add_requires("libjhasm 0.3.2")
+add_requires("libjhasm 0.3.3")
 -- 嵌套 libca 全路径钉定，缺一条就多一个实例。
 -- 注：不能用 `*.*` 一类通配塌缩——嵌套依赖不只有 libca（如
 -- libjclassfile.libjstr），通配会把同层非 libca 依赖也钉上 libca 的版本，
