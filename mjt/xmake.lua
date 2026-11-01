@@ -117,5 +117,27 @@ if has_config("with_tests") then
         if is_plat("linux") then
             add_syslinks("pthread")
         end
+
+    target("mjt_ingest_bench")
+        set_kind("binary")
+        set_group("mjt/test")
+        set_default(false)
+
+        add_deps("mjt_shared")
+        -- analysis-db 导入基准（B6，#121）：镜像 workspace unittest 链接闭包
+        -- （无 gtest / test_helper）；libjdk_finder 由 mjt_shared 闭包 add_links
+        -- 引用，其 -libpath 在此显式给（unittest 侧来自 test_helper 的 public 包）。
+        add_packages("libjdk_finder")
+        mjt_binary_link_closure("mjt_shared", "mjbase")
+        mjt_binary_link_closure("libjhasm", "libjclassfile", "libjstr", "libjbc", "libjzip", "libjdk_finder", "sqlite3")
+        add_files("bench/ingest_bench.cpp")
+        set_rundir("$(projectdir)")
+
+        if is_plat("windows") then
+            add_cxflags("/utf-8", {tools = "cl"})
+        end
+        if is_plat("linux") then
+            add_syslinks("pthread")
+        end
 end
 
