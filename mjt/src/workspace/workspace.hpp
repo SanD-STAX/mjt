@@ -427,6 +427,13 @@ private:
     ///        i_workspace.hpp：pipeline/passNames 互斥，均空取 default-optimize）。
     WorkspaceErrorInfo runPipeline(model::ResourceContainer& candidate,
                                    const PipelineRequest& request) const;
+    /// @brief jar 级 LVT 形态兜底旗标（B3 显示名策略，#121 §4.4）。
+    ///
+    /// 懒算 + revision 键控缓存：首次查询或 revision 前进后对工作副本全容器
+    /// class 扫描 LVT 行集，非法名占比 ≥ 1/2 判整 jar 不可信。判定核心在
+    /// mjbase::analysis（纯函数面）；旗标只作用于查询输出的呈现名，不改
+    /// 字节码、不入库（v1 决策：判定结果入库后置）。
+    bool lvtJarFallbackFlag() const;
     /// @brief 把重命名请求展开为重映射计划 + 审阅映射表 + 风险清单
     ///        （analyzeRename/applyRename 共用的展开面）。
     WorkspaceErrorInfo buildRenamePlan(const RenameRequest& request,
@@ -455,6 +462,11 @@ private:
     std::string  primaryClassUri_;
     ca::u64      revision_ = 0;
     ca::u64      nextSupportingId_ = 1;
+    /// LVT 显示名策略 jar 级兜底旗标缓存（revision 键控懒算；打开新主资源
+    /// 时置 computed=false 重算）。mutable：查询路径（const）内懒算。
+    mutable bool    lvtPolicyComputed_ = false;
+    mutable ca::u64 lvtPolicyRevision_ = 0;
+    mutable bool    lvtJarFallback_    = false;
 };
 
 /// @brief 递归扫描 JDK 目录下的 .jar/.zip/.jmod，把层次摘要灌入 @p hierarchy。

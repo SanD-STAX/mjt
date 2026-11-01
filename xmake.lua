@@ -153,9 +153,12 @@ includes("xmake/libca_rules.lua")
 -- require 清单声明依赖；本仓 require 清单与其字面对齐（PR-A），消费图实例
 -- 单一。兄弟目录源码级依赖接线（--mjbase_root / CI checkout）已随切换拆除；
 -- mjbase 侧开发走包词条发版节奏。
+-- 0.0.8 = analysis-db v3 条目身份层（B1：inputs/entries + classes.entry_id）；
+-- 0.0.9 = LVT 显示名策略判定核心（B3：analysis/lvt_display_policy）；
 -- 0.0.10 = analysis-db 出口遮蔽层（B2：suspect 扫描 + mask_rules 表 +
--- 信任级别 meta + recordMaskRuleHits 记账 + mask_evaluator 求值器核心）；
--- 本行须待 luiox-repo 追加 0.0.10 词条（锁 mjbase 侧 B2 合入 commit）后方可配置。
+-- 信任级别 meta + recordMaskRuleHits 记账 + mask_evaluator 求值器核心）+
+-- 性能调优（B6：打开面 PRAGMA + refs_source_class 索引 + 按源反查两步走）；
+-- 本行须待 luiox-repo 追加 0.0.10 词条后方可配置。
 add_requires("mjbase 0.0.10")
 
 includes("test_helper")
