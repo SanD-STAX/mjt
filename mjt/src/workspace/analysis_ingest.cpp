@@ -1,9 +1,12 @@
 #include "analysis_ingest.hpp"
 
+#include <map>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 
+#include "libca/crypto/sha256.hpp"
 #include "reference_scan.hpp"
 #include "workspace.hpp"
 
@@ -16,6 +19,12 @@ Utf8String utf8(const std::string& value)
 {
     return Utf8String::from_data_unchecked(reinterpret_cast<const ca::u8*>(value.data()),
                                            value.size());
+}
+
+ca::str::Utf8StringRef utf8Ref(const std::string& value)
+{
+    return ca::str::Utf8StringRef::from_data(reinterpret_cast<const ca::u8*>(value.data()),
+                                             value.size());
 }
 
 AnalysisIngestError workspaceError(const WorkspaceErrorInfo& error)
@@ -34,11 +43,123 @@ AnalysisIngestError databaseError(mjbase::project::AnalysisDbError error)
     return output;
 }
 
+/// @brief 条目形态判定（regular 旗标，B1 最小口径）。
+///
+/// 常规条目 = 常规 zip 条目路径形态：非空、无控制字符/DEL、无反斜杠、
+/// 非前导或尾随 '/'、无空路径段（连续斜杠）、无 "." / ".." 段。对应
+/// #39 的条目形态要求（伪装目录、非常规命名等硬壳容器形态）；更细的
+/// 形态切面随 census（B4）落地，本判定只做结构面。
+bool isRegularEntryPath(const std::string& uri)
+{
+    if (uri.empty() || uri.front() == '/' || uri.back() == '/') return false;
+    for (const char c : uri) {
+        const auto raw = static_cast<unsigned char>(c);
+        if (raw < 0x20 || raw == 0x7f || c == '\\') return false;
+    }
+    std::string::size_type start = 0;
+    while (start < uri.size()) {
+        const auto slash = uri.find('/', start);
+        const auto end   = (slash == std::string::npos) ? uri.size() : slash;
+        const std::string_view segment(uri.data() + start, end - start);
+        if (segment.empty() || segment == "." || segment == "..") return false;
+        if (slash == std::string::npos) break;
+        start = slash + 1;
+    }
+    return true;
+}
+
+/// @brief 容器资源类型串 → 条目 kind（开放文本；workspace 面是小写口径
+///        "class"/"manifest"/"jar"/"resource"，jar/unknown 按不透明 resource
+///        记，更细切面随 census（B4）落地）。
+Utf8String entryKind(const std::string& type)
+{
+    if (type == "class") return Utf8String::from_cstr("class");
+    if (type == "manifest") return Utf8String::from_cstr("manifest");
+    return Utf8String::from_cstr("resource");
+}
+
 }   // namespace
 
 ca::Result<AnalysisIngestStats, AnalysisIngestError> ingestIntoAnalysisDb(
     const WorkspaceBase& workspace, mjbase::project::AnalysisDb& db)
 {
+    //-- 条目身份：容器面遍历 + 内容锚 + 输入/条目登记 ------------------------
+
+    auto resources = workspace.listResources(true);
+    if (resources.is_err()) {
+        return ca::core::Err(workspaceError(std::move(resources).unwrap_err()));
+    }
+    // listResources 按 uri 字典序返回，满足 canonical 序列化的确定性要求。
+    const auto resourceList = std::move(resources).unwrap();
+
+    std::vector<mjbase::project::DbEntryInput> entryInputs;
+    entryInputs.reserve(resourceList.size());
+    ca::crypto::SHA256 containerHasher;
+    ca::usize          canonicalSize = 0;
+    const auto         feedU64       = [&containerHasher](ca::u64 value) {
+        ca::u8 raw[8];
+        for (ca::usize i = 0; i < 8; ++i) {
+            raw[i] = static_cast<ca::u8>((value >> (8 * i)) & 0xff);   // 小端
+        }
+        containerHasher.add(raw, sizeof(raw));
+    };
+
+    for (const ResourceSummary& resource : resourceList) {
+        auto content = workspace.readResource(resource.uri);
+        if (content.is_err()) {
+            return ca::core::Err(workspaceError(std::move(content).unwrap_err()));
+        }
+        auto bytes = std::move(content).unwrap().bytes;
+
+        // 容器 canonical 序列化（analysis-project-schema-v2 §1.6）：
+        // len(uri, u64 小端) + uri + len(payload, u64 小端) + payload。
+        feedU64(resource.uri.size());
+        containerHasher.add(resource.uri.data(), resource.uri.size());
+        feedU64(bytes.size());
+        containerHasher.add(bytes.data(), bytes.size());
+        canonicalSize += 2 * sizeof(ca::u64) + resource.uri.size() + bytes.size();
+
+        mjbase::project::DbEntryInput input;
+        input.path    = utf8(resource.uri);
+        input.kind    = entryKind(resource.type);
+        input.size    = static_cast<ca::i64>(bytes.size());
+        input.sha256 =
+            utf8(ca::crypto::sha256_hex(ca::core::ByteSlice(bytes.data(), bytes.size())));
+        input.regular = isRegularEntryPath(resource.uri);
+        entryInputs.push_back(std::move(input));
+    }
+
+    const std::string containerDigest = containerHasher.get_hash();
+    auto inputId = db.ensureInput(utf8Ref(workspace.sourcePath()), utf8Ref(containerDigest),
+                                  static_cast<ca::i64>(canonicalSize));
+    if (inputId.is_err()) {
+        return ca::core::Err(databaseError(std::move(inputId).unwrap_err()));
+    }
+    const ca::i64 primaryInputId = inputId.unwrap();
+
+    auto entryStats = db.ingestEntries(primaryInputId, std::move(entryInputs));
+    if (entryStats.is_err()) {
+        return ca::core::Err(databaseError(std::move(entryStats).unwrap_err()));
+    }
+    const auto entryCounts = entryStats.unwrap();
+
+    // 条目 id 索引（活跃行）：class 条目 → classes.entry_id 关联用。
+    auto listedEntries = db.listEntries(primaryInputId);
+    if (listedEntries.is_err()) {
+        return ca::core::Err(databaseError(std::move(listedEntries).unwrap_err()));
+    }
+    // unwrap() 的左值重载按值返回（拷贝），DbEntryInfo 携 move-only 的
+    // Utf8String 拷不动——必须走 rvalue 重载把行表移动出来。
+    auto entryRows = std::move(listedEntries).unwrap();
+    std::unordered_map<std::string, ca::i64> entryIdByPath;
+    for (const mjbase::project::DbEntryInfo& row : entryRows) {
+        if (!row.tombstoned) {
+            entryIdByPath.emplace(row.path.to_std_string(), row.entryId);
+        }
+    }
+
+    //-- 类事实（类头 + 成员清单，class 条目关联） ----------------------------
+
     auto classInfos = workspace.listClasses();
     if (classInfos.is_err()) {
         return ca::core::Err(workspaceError(std::move(classInfos).unwrap_err()));
@@ -54,6 +175,8 @@ ca::Result<AnalysisIngestStats, AnalysisIngestError> ingestIntoAnalysisDb(
         input.superName    = utf8(info.superName);
         input.access       = info.access;
         input.version      = info.version;
+        const auto entry   = entryIdByPath.find(info.resourceUri);
+        input.entryId      = entry != entryIdByPath.end() ? entry->second : 0;
         input.interfaces.reserve(info.interfaces.size());
         for (const std::string& interfaceName : info.interfaces) {
             input.interfaces.push_back(utf8(interfaceName));
@@ -80,13 +203,18 @@ ca::Result<AnalysisIngestStats, AnalysisIngestError> ingestIntoAnalysisDb(
     }
 
     AnalysisIngestStats stats;
-    stats.classes = classes.size();
+    stats.classes          = classes.size();
+    stats.entries          = entryCounts.total;
+    stats.createdEntries    = entryCounts.created;
+    stats.tombstonedEntries = entryCounts.tombstoned;
     for (const mjbase::project::DbClassInput& input : classes) stats.members += input.members.size();
 
     auto ingested = db.ingestClasses(std::move(classes));
     if (ingested.is_err()) {
         return ca::core::Err(databaseError(std::move(ingested).unwrap_err()));
     }
+
+    //-- 直接引用（现状不变） --------------------------------------------------
 
     auto scan = workspace.referenceScan();
     if (scan.is_err()) {

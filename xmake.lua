@@ -153,7 +153,9 @@ includes("xmake/libca_rules.lua")
 -- require 清单声明依赖；本仓 require 清单与其字面对齐（PR-A），消费图实例
 -- 单一。兄弟目录源码级依赖接线（--mjbase_root / CI checkout）已随切换拆除；
 -- mjbase 侧开发走包词条发版节奏。
-add_requires("mjbase 0.0.7")
+-- 0.0.8 = analysis-db v3 条目身份层（B1：inputs/entries + classes.entry_id）；
+-- 本行须待 luiox-repo 追加 0.0.8 词条（锁 mjbase 侧 B1 合入 commit）后方可配置。
+add_requires("mjbase 0.0.8")
 
 includes("test_helper")
 includes("mjt")
