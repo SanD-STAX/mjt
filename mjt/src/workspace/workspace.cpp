@@ -28,6 +28,7 @@
 #include "mjbase/hierarchy/class_hierarchy.hpp"
 #include "mjbase/hierarchy/summary.hpp"
 #include "mjbase/analysis/class_scan.hpp"
+#include "mjbase/analysis/lvt_display_policy.hpp"
 #include "mjbase/asm/remapper/member_remap_plan.hpp"
 #include "mjbase/asm/remapper/resource_remapper.hpp"
 #include "mjbase/jar/jar_reader.hpp"
@@ -248,8 +249,25 @@ FieldInfo makeFieldInfo(jbc::core::ClassFile& cf, jbc::core::MemberInfo& field)
     return output;
 }
 
+/// @brief 把 LVT 显示名策略应用到查询输出的 locals（B3，#121 §4.4）。
+///
+/// 只改呈现名：行数、槽位、描述符原样——LVT 原文在字节码里照存，判定
+/// 结果也不入库（v1 决策）。呈现核心在 mjbase::analysis（纯函数面）。
+void applyLvtDisplayPolicy(std::vector<LocalVariableInfo>& locals, bool jarFallback)
+{
+    if (locals.empty()) return;
+    std::vector<mjbase::analysis::LvtDisplayRow> rows;
+    rows.reserve(locals.size());
+    for (const auto& local : locals)
+        rows.push_back({local.name, local.descriptor, static_cast<ca::u32>(local.index)});
+    const auto names = mjbase::analysis::lvtDisplayNames(rows, jarFallback);
+    for (ca::usize index = 0; index < locals.size(); ++index)
+        locals[index].name = names[index].to_std_string();
+}
+
 WorkspaceResult<MethodInfo> makeMethodInfo(jbc::ir::ClassSession& session,
-                                           jbc::core::MemberInfo& method, ca::usize methodIndex)
+                                           jbc::core::MemberInfo& method, ca::usize methodIndex,
+                                           bool lvtFallback)
 {
     jbc::core::ClassFile& cf = session.backing();
     MethodInfo output;
@@ -270,6 +288,7 @@ WorkspaceResult<MethodInfo> makeMethodInfo(jbc::ir::ClassSession& session,
                     std::to_string(static_cast<int>(promoted.unwrap_err())) + ")"));
         output.instructionCount = promoted.unwrap()->dom.size();
         support::collectLocalVariables(cf, *code, output.localVariables);
+        applyLvtDisplayPolicy(output.localVariables, lvtFallback);
     }
     output.exceptions = support::exceptionNames(cf, method);
     auto lines        = lineNumbersOf(session, method, methodIndex);
@@ -303,7 +322,8 @@ std::vector<std::string> innerClassNames(jbc::core::ClassFile& cf)
     return names;
 }
 
-WorkspaceResult<ClassInfo> decodeClass(const std::string& uri, const model::ClassResource& resource)
+WorkspaceResult<ClassInfo> decodeClass(const std::string& uri, const model::ClassResource& resource,
+                                       bool lvtFallback)
 {
     auto session = sessionOf(resource.get(), "decode class " + uri);
     if (session.is_err()) return ca::core::Err(std::move(session).unwrap_err());
@@ -325,7 +345,7 @@ WorkspaceResult<ClassInfo> decodeClass(const std::string& uri, const model::Clas
     }
     for (auto& field : cf.fields) output.fields.push_back(makeFieldInfo(cf, field));
     for (ca::usize index = 0; index < cf.methods.size(); ++index) {
-        auto info = makeMethodInfo(*held, cf.methods[index], index);
+        auto info = makeMethodInfo(*held, cf.methods[index], index, lvtFallback);
         if (info.is_err()) return ca::core::Err(std::move(info).unwrap_err());
         output.methods.push_back(std::move(info).unwrap());
     }
@@ -1234,6 +1254,9 @@ WorkspaceResult<void> WorkspaceBase::openJar(
         redoHint_.clear();
         revision_         = 0;
         nextSupportingId_ = 1;
+        // LVT 显示名策略旗标缓存失效：新主资源的形态基线重算（revision 复位
+        // 不能单独作键——新旧会话 revision 可能同为 0）。
+        lvtPolicyComputed_ = false;
         return ca::core::Ok();
     }
     catch (const std::exception& exception) {
@@ -1267,7 +1290,9 @@ WorkspaceResult<void> WorkspaceBase::openClass(const std::string& path)
             return ca::core::Err(
                 error(WorkspaceError::DataLoss, "open class", "class resource was not imported"));
         }
-        auto info = decodeClass(path, *importedClass);
+        // 该次解码只取内名建 URI：LVT 显示名旗标此处置 false（工作副本尚未
+        // 就位，不触发扫描）。
+        auto info = decodeClass(path, *importedClass, false);
         if (info.is_err()) return ca::core::Err(std::move(info).unwrap_err());
         auto decoded = std::move(info).unwrap();
         if (decoded.internalName.empty()) {
@@ -1320,6 +1345,9 @@ WorkspaceResult<void> WorkspaceBase::openClass(const std::string& path)
         redoHint_.clear();
         revision_         = 0;
         nextSupportingId_ = 1;
+        // LVT 显示名策略旗标缓存失效：新主资源的形态基线重算（revision 复位
+        // 不能单独作键——新旧会话 revision 可能同为 0）。
+        lvtPolicyComputed_ = false;
         return ca::core::Ok();
     }
     catch (const std::exception& exception) {
@@ -1445,6 +1473,40 @@ const std::string& WorkspaceBase::primaryClassUri() const noexcept
 ca::u64 WorkspaceBase::revision() const noexcept
 {
     return revision_;
+}
+
+bool WorkspaceBase::lvtJarFallbackFlag() const
+{
+    if (lvtPolicyComputed_ && lvtPolicyRevision_ == revision_) return lvtJarFallback_;
+    mjbase::analysis::LvtShapeStats stats;
+    // 全容器 class 扫描 LVT 行集（与 ReferenceScan::build 同纪律：净化预检
+    // 不过的损坏 class 跳过、会话打不开跳过）。这里只需逐名形态判定，行集
+    // 不落任何存储。
+    workingContainer()->visitResources(
+        [&](std::string_view, const model::IResource& resource) {
+            const auto* classResource =
+                ca::core::tag_cast::dyn_cast<const model::ClassResource>(&resource);
+            if (classResource == nullptr) return;
+            if (!spi::sanitizeClassFile(classResource->get()).empty()) return;
+            auto session = jbc::ir::makeSessionFromBytes(jbc::core::ByteView(classResource->get()));
+            if (session.is_err()) return;
+            auto                  held = std::move(session).unwrap();
+            jbc::core::ClassFile& cf   = held->backing();
+            for (auto& method : cf.methods) {
+                jbc::core::CodeAttr* code = support::ensureCode(cf, method);
+                if (code == nullptr) continue;
+                std::vector<LocalVariableInfo> locals;
+                support::collectLocalVariables(cf, *code, locals);
+                for (const auto& local : locals) {
+                    ++stats.total;
+                    if (!mjbase::analysis::lvtNameTrustworthy(local.name)) ++stats.invalid;
+                }
+            }
+        });
+    lvtJarFallback_     = mjbase::analysis::lvtJarFallback(stats);
+    lvtPolicyRevision_  = revision_;
+    lvtPolicyComputed_  = true;
+    return lvtJarFallback_;
 }
 
 bool WorkspaceBase::isDirty() const
@@ -1785,7 +1847,7 @@ WorkspaceResult<std::vector<ClassInfo>> WorkspaceBase::listClasses() const
         const auto* classResource =
             ca::core::tag_cast::dyn_cast<const model::ClassResource>(&resource);
         if (classResource == nullptr) return;
-        auto decoded = decodeClass(std::string(uri), *classResource);
+        auto decoded = decodeClass(std::string(uri), *classResource, lvtJarFallbackFlag());
         if (decoded.is_err()) return;
         result.push_back(std::move(decoded).unwrap());
     });
@@ -1806,7 +1868,7 @@ WorkspaceResult<ClassInfo> WorkspaceBase::classInfo(const std::string& uriOrInte
         working_->getResource(uri.unwrap()));
     if (resource == nullptr)
         return ca::core::Err(error(WorkspaceError::NotFound, "get class info", uri.unwrap()));
-    return decodeClass(uri.unwrap(), *resource);
+    return decodeClass(uri.unwrap(), *resource, lvtJarFallbackFlag());
 }
 
 WorkspaceResult<MethodInfo> WorkspaceBase::methodInfo(const std::string& owner,
@@ -1951,7 +2013,7 @@ WorkspaceResult<MethodBytecode> WorkspaceBase::methodBytecode(const std::string&
         auto& method = cf.methods[methodIndex];
         if (utf8Text(cf, method.nameCp) != name || utf8Text(cf, method.descCp) != descriptor)
             continue;
-        auto info = makeMethodInfo(*held, method, methodIndex);
+        auto info = makeMethodInfo(*held, method, methodIndex, lvtJarFallbackFlag());
         if (info.is_err()) return ca::core::Err(std::move(info).unwrap_err());
         MethodBytecode result;
         result.method = std::move(info).unwrap();
@@ -2087,7 +2149,7 @@ WorkspaceResult<std::vector<SearchHit>> WorkspaceBase::searchClasses(
             ca::core::tag_cast::dyn_cast<const model::ClassResource>(&resource);
         if (classResource == nullptr) return;
         const std::string uri{uriView};
-        auto              decoded = decodeClass(uri, *classResource);
+        auto              decoded = decodeClass(uri, *classResource, lvtJarFallbackFlag());
         if (decoded.is_err()) return;
         const auto& info = decoded.unwrap();
         if (!matchesSearchScope(info.internalName, options)) return;
@@ -2115,7 +2177,7 @@ WorkspaceResult<std::vector<SearchHit>> WorkspaceBase::searchMembers(
             ca::core::tag_cast::dyn_cast<const model::ClassResource>(&resource);
         if (classResource == nullptr) return;
         const std::string uri{uriView};
-        auto              decoded = decodeClass(uri, *classResource);
+        auto              decoded = decodeClass(uri, *classResource, lvtJarFallbackFlag());
         if (decoded.is_err()) return;
         const auto& info = decoded.unwrap();
         if (!matchesSearchScope(info.internalName, options)) return;

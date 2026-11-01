@@ -155,7 +155,9 @@ includes("xmake/libca_rules.lua")
 -- mjbase 侧开发走包词条发版节奏。
 -- 0.0.8 = analysis-db v3 条目身份层（B1：inputs/entries + classes.entry_id）；
 -- 本行须待 luiox-repo 追加 0.0.8 词条（锁 mjbase 侧 B1 合入 commit）后方可配置。
-add_requires("mjbase 0.0.8")
+-- 0.0.9 = LVT 显示名策略判定核心（B3：analysis/lvt_display_policy）；
+-- 本行须待 luiox-repo 追加 0.0.9 词条（锁 mjbase 侧 B3 合入 commit）后方可配置。
+add_requires("mjbase 0.0.9")
 
 includes("test_helper")
 includes("mjt")
