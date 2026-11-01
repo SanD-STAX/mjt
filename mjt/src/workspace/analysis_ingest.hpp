@@ -3,13 +3,21 @@
 ///
 /// 职责边界：workspace 负责从 class 字节解码（ClassInfo + ReferenceScan），
 /// mjbase::project::AnalysisDb 负责持久化与查询。本桥把两者接起来：
-/// - 主容器全部 class 的头事实与成员清单写入 `ingestClasses`；
+/// - 主容器条目身份（jar 内文件身份：path/kind/size/sha256/regular）写入
+///   `ensureInput` + `ingestEntries`。条目遍历走容器面（`listResources` +
+///   `readResource`），内容锚为精确字节 SHA-256；输入行的内容锚是容器
+///   canonical 序列化（analysis-project-schema-v2 §1.6 口径）的 SHA-256。
+///   形态判定（regular 旗标）是本桥的最小口径，见实现内注释。
+/// - 主容器全部 class 的头事实与成员清单写入 `ingestClasses`；class 条目
+///   通过 `DbClassInput::entryId` 与 `classes.entry_id` 关联。
 /// - 主容器 class 发出的直接引用（方法/字段/类型）写入 `replaceReferences`；
-/// - supporting JAR 只作为引用目标出现，其自身 class 不登记、其发出的引用
-///   不写入（支持库可能包含整个 JDK，不属于工程身份面）。
+/// - supporting JAR 只作为引用目标出现，其自身 class 与条目均不登记（支持
+///   库可能包含整个 JDK，不属于工程身份面）。
 ///
-/// 两次写入各自单事务；第二步失败时类事实已提交、引用仍是旧集合。整库重建
-/// 可安全重跑：类身份 upsert 不改 ID，引用是整体替换。
+/// 写入顺序：条目身份 → 类事实 → 引用，各步各自单事务；中途失败时前面的
+/// 步已提交，引用仍是旧集合。整库重建可安全重跑：输入按 path 复用
+/// input_id，条目按 (input_id, path, sha256) 匹配——同内容重导入 id 不漂，
+/// 消失条目进墓碑不删行；类身份 upsert 不改 ID，引用是整体替换。
 #pragma once
 
 #include <string>
@@ -46,6 +54,12 @@ struct AnalysisIngestStats
     ca::usize classes    = 0;
     ca::usize members    = 0;
     ca::usize references = 0;
+    /// @brief 主容器登记的条目数（ingestEntries 的 total）。
+    ca::usize entries    = 0;
+    /// @brief 本次新分配 entry_id 的条目数；同内容重导入应为 0。
+    ca::usize createdEntries    = 0;
+    /// @brief 本次标记消失（墓碑）的既有条目数。
+    ca::usize tombstonedEntries = 0;
 };
 
 /// @brief 把工作区主容器的类/成员/直接引用整库写入分析数据库。
