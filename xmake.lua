@@ -169,7 +169,9 @@ includes("xmake/libca_rules.lua")
 -- 0.0.17 = method_versions 方法版本指纹表（schema v8：32 字节 BLOB +
 -- fp_version 算法版本列 + is_current 部分唯一索引当前指针，#154；旧 v7 库
 -- fail-loud 属预期，临时库重建即愈）。
-add_requires("mjbase 0.0.17")
+-- 0.0.18 = jar 导入同名重复条目改末现保留（对齐 JVM 类加载口径，PR #160）+
+-- asm/remapper 注解递归畸形输入边界守卫（#158）；词条面无新增依赖。
+add_requires("mjbase 0.0.18")
 
 includes("test_helper")
 includes("mjt")

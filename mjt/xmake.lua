@@ -161,6 +161,13 @@ if has_config("with_tests") then
         add_files("mcp/test/*.cpp")
         set_rundir("$(projectdir)")
 
+        if is_plat("windows") then
+            add_cxflags("/utf-8", {tools = "cl"})
+        end
+        if is_plat("linux") then
+            add_syslinks("pthread")
+        end
+
     target("mjt_cli_unittest")
         set_kind("binary")
         set_group("mjt/test")
