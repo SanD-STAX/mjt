@@ -270,6 +270,15 @@ DecompilerJarDiscovery discoverDecompilerJarDetailed(const DecompileRequest& req
     return discovery;
 }
 
+std::string truncateUtf8(const std::string& text, std::size_t limit)
+{
+    if (text.size() <= limit) return text;
+    //不得在多字节序列中间截断：从 limit 位置向前回退到 UTF-8 首字节。
+    std::size_t cut = limit;
+    while (cut > 0 && (static_cast<unsigned char>(text[cut]) & 0xC0) == 0x80) --cut;
+    return text.substr(0, cut) + "…";
+}
+
 namespace {
 
 std::string discoverDecompilerJar(const DecompileRequest& request)
@@ -473,15 +482,6 @@ std::vector<fs::path> findJavaFiles(const fs::path& root)
 
 constexpr std::size_t kCauseSummaryLimit = 400;    //根因行截断上限（字节）
 constexpr std::size_t kOffenderLimit     = 96;     //肇事文件名截断上限（字节）
-
-std::string truncateUtf8(const std::string& text, std::size_t limit)
-{
-    if (text.size() <= limit) return text;
-    //不得在多字节序列中间截断：从 limit 位置向前回退到 UTF-8 首字节。
-    std::size_t cut = limit;
-    while (cut > 0 && (static_cast<unsigned char>(text[cut]) & 0xC0) == 0x80) --cut;
-    return text.substr(0, cut) + "…";
-}
 
 ///取诊断文本中优先级最高的根因行：JVM 堆栈的真实根因是最后一个
 ///"Caused by: " 行；没有堆栈形态时退回首个非空行。

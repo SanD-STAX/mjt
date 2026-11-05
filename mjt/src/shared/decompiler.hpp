@@ -27,6 +27,13 @@ bool isSafeArchivePath(const std::filesystem::path& path);
 ///std::filesystem::u8path 构造，杜绝 ACP 隐式窄转码 mojibake。
 std::filesystem::path archiveEntryRelativePath(const std::string& entryName);
 
+///@brief UTF-8 文本按字节上限截断：超限时从 limit 位置向前回退到 UTF-8 字符
+///       边界再追加 "…"（未超限原样返回）。纯字节 substr 可切进多字节序列
+///       中间产出非法 UTF-8，进 i18n 渲染通道会经 Utf8StringBuilder 软失败
+///       吞成空串——任何进展示/i18n 通道的截断一律走这里（诊断根因摘要与
+///       CLI 批量跳过披露同源口径）。
+std::string truncateUtf8(const std::string& text, std::size_t limit);
+
 ///@brief mjt 支持的外部 Java 反编译器。
 enum class DecompilerKind
 {

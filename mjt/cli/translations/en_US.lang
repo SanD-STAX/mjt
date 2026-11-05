@@ -57,6 +57,7 @@ mjt.cli.fix.reason.invalid_class_entry=a .class entry was not recognized as vali
 mjt.cli.fix.reason.corrupt_output_marker=resource name matches a known corrupt output marker
 mjt.cli.err.fix_same_path=input and output must be different files: {0}
 mjt.cli.err.mapping_same_path=input and output must be different files: {0}
+mjt.cli.err.invalid_value=invalid value for {0}: {1}
 mjt.cli.err.fix_output_busy=cannot replace the existing output file: {0}
 
 # ── decompile ───────────────────────────────────────────────
@@ -68,12 +69,10 @@ mjt.cli.decompile.jar_help=explicit decompiler JAR path
 mjt.cli.decompile.timeout_help=subprocess timeout in milliseconds (default 120000)
 mjt.cli.decompile.memory_help=backend JVM max heap in MiB (default 1024)
 mjt.cli.decompile.err.need_mode=either -c <class> (single class) or -o <outdir|.zip> (batch) is required
-mjt.cli.decompile.err.batch_output_missing=batch mode requires an output path (-o <outdir> or <out>.zip)
 mjt.cli.decompile.err.need_all=batch decompilation covers all {0} classes in the jar; pass --all to confirm
 mjt.cli.decompile.err.single_output_java=single-class output must be a .java file (or omit -o to print to stdout)
 mjt.cli.decompile.err.class_not_found=class not found in jar: {0}
 mjt.cli.decompile.err.open_failed=cannot open jar: {0}
-mjt.cli.decompile.err.invalid_value=invalid value for {0}: {1}
 mjt.cli.decompile.err.stage_failed=staging failed: {0}
 mjt.cli.decompile.err.readback_failed=cannot read back the decompiled source: {0}
 mjt.cli.decompile.err.temp_failed=cannot create the decompile temporary directory
@@ -146,6 +145,7 @@ mjt.cli.classes.err.invalid_kind=invalid --kind value: {0} (expected class / int
 mjt.cli.classes.err.invalid_origin=invalid --origin value: {0} (expected jdk / known / unknown)
 mjt.cli.classes.err.invalid_limit=--limit must be a positive integer: {0}
 mjt.cli.classes.err.open_failed=cannot open jar: {0}
+mjt.cli.classes.err.analysis_failed=jar analysis failed: {0}
 mjt.cli.classes.err.write_failed=cannot write the output file: {0}
 
 # ── disasm ──────────────────────────────────────────────────
@@ -155,6 +155,7 @@ mjt.cli.disasm.output_help=write the jasm text to a file; stdout keeps the text 
 mjt.cli.disasm.written=jasm text written to: {0}
 mjt.cli.disasm.err.class_not_found=class not found in jar: {0}
 mjt.cli.disasm.err.open_failed=cannot open jar: {0}
+mjt.cli.disasm.err.class_info_failed=cannot read class info: {0}
 mjt.cli.disasm.err.disasm_failed=disassembly failed: {0}
 mjt.cli.disasm.err.write_failed=cannot write the output file: {0}
 
@@ -167,3 +168,4 @@ mjt.cli.subs.class_kind=class kind: {0}
 mjt.cli.subs.counted=fields: {0}, methods: {1}
 mjt.cli.subs.err.class_not_found=class not found in jar: {0}
 mjt.cli.subs.err.open_failed=cannot open jar: {0}
+mjt.cli.subs.err.class_info_failed=cannot read class info: {0}

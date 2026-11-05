@@ -57,7 +57,8 @@ ca::Result<DisasmReport, DisasmError> collectDisasm(const std::string& jarPath,
                            ? disasmError(DisasmError::Kind::ClassNotFound,
                                          "mjt.cli.disasm.err.class_not_found", {internalName})
                            : disasmError(DisasmError::Kind::Runtime,
-                                         "mjt.cli.disasm.err.open_failed", {info.message}));
+                                         "mjt.cli.disasm.err.class_info_failed",
+                                         {info.message}));
     }
 
     auto disassembled = ws.getJasm(std::move(selected).unwrap().resourceUri.ref());

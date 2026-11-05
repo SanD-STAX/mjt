@@ -198,7 +198,7 @@ bool parsePositiveInteger(const std::string& raw, const char* flag, ca::i64& val
             return true;
         }
     }
-    usageFailure(mjt::shared::trfStr("mjt.cli.decompile.err.invalid_value",
+    usageFailure(mjt::shared::trfStr("mjt.cli.err.invalid_value",
                                      {flag, raw.empty() ? std::string{"(empty)"} : raw}));
     return false;
 }
@@ -253,6 +253,11 @@ int runDecompile(const ca::opt::ParseResult& args)
     if (args.has("max-memory-mib") &&
         !parsePositiveInteger(args.get("max-memory-mib"), "--max-memory-mib", options.maxMemoryMiB))
         return mjt::cli::kExitUsage;
+    //共享层字段是 i32：超上界的值经 static_cast 回绕成小值/负值（脚本误传
+    //字节数等），按用法错误拒绝而不是溢出后落运行失败通道。
+    if (options.maxMemoryMiB > std::numeric_limits<ca::i32>::max())
+        return usageFailure(mjt::shared::trfStr(
+            "mjt.cli.err.invalid_value", {"--max-memory-mib", args.get("max-memory-mib")}));
 
     //单类模式：-c 在场优先（短安全名方案，敌意类名免疫；-o 缺省 stdout）。
     if (args.has("class")) {

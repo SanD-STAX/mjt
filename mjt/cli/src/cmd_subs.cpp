@@ -84,8 +84,8 @@ ca::Result<SubsReport, SubsError> collectSubs(const std::string& jarPath,
         return ca::Err(info.code == workspace::WorkspaceError::NotFound
                            ? subsError(SubsError::Kind::ClassNotFound,
                                        "mjt.cli.subs.err.class_not_found", {internalName})
-                           : subsError(SubsError::Kind::Runtime, "mjt.cli.subs.err.open_failed",
-                                       {info.message}));
+                           : subsError(SubsError::Kind::Runtime,
+                                       "mjt.cli.subs.err.class_info_failed", {info.message}));
     }
     // MethodInfo 携 move-only Utf8String：unwrap 走移动重载，一次取值。
     auto info = std::move(selected).unwrap();

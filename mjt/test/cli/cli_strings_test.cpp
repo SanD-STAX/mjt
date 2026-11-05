@@ -151,6 +151,30 @@ TEST(MjtCliStringsTest, SkipsMalformedClassEntries)
     EXPECT_EQ(info.classesSkipped, 1);
 }
 
+TEST(MjtCliStringsTest, SkippedAccountingMatchesContainerClassification)
+{
+    // 对账口径与容器分类（mjbase JarUtil::isClassFile）双侧同源：`.class/`
+    // 尾斜杠条目容器剥尾斜杠登记 ClassResource（计数侧须按类计），大小写
+    // 变体 `.CLASS` 双侧都不计，坏字节 .class 单侧计（不进骨架）——三者
+    // 合计 skipped 恰为 1，任何一侧口径漂移都会翻成 2 / 0 / 负数。
+    // JarWriter 会丢弃尾斜杠条目名，语料走原始 zip 直写（writeRawZip）。
+    const std::vector<std::pair<std::string, std::vector<ca::u8>>> entries = {
+        {"fixture/Words.class", cli_fixture::assembleWordsClass()},
+        {"fixture/Trail.class/", cli_fixture::assembleWordsClass()},
+        {"fixture/Upper.CLASS", cli_fixture::assembleWordsClass()},
+        {"fixture/Broken.class",
+         std::vector<ca::u8>{'n', 'o', 't', '-', 'a', '-', 'c', 'l', 'a', 's', 's'}},
+    };
+    const auto path = test::getTempOutPath("mjt_cli_strings_accounting_fixture.jar");
+    cli_fixture::writeRawZip(path, entries);
+
+    auto report = collectStrings(path.string(), "", 1);
+    ASSERT_TRUE(report.is_ok()) << report.unwrap_err().message;
+    const auto info = std::move(report).unwrap();
+    EXPECT_EQ(info.classesScanned, 2);   // Words + Trail（剥尾斜杠登记）
+    EXPECT_EQ(info.classesSkipped, 1);   // 仅 Broken；Upper.CLASS 双侧不计
+}
+
 TEST(MjtCliStringsTest, FailsOnUnknownClassAndBadMinLen)
 {
     const auto jar = cli_fixture::writeStringsJar();

@@ -149,18 +149,19 @@ EntryNameSafety classifySegment(const std::string& segment)
     return {true, {}};
 }
 
-/// 条目是否 class 形态（后缀 ".class" 大小写不敏感；Multi-Release 版本化
-/// 条目同为该形态）。
+/// 条目是否 class 形态（与 mjbase JarUtil::isClassFile 容器分类口径同源）：
+/// 后缀大小写敏感；OS2.9 形 `.class/` 尾斜杠条目按类计——容器导入侧剥尾
+/// 斜杠登记为 ClassResource，计数侧不对齐会让 strings 的 skipped 对账出
+/// 负数（进扫描不进总数）。
 bool isClassEntryName(const std::string& canonical)
 {
-    constexpr std::string_view kSuffix = ".class";
-    if (canonical.size() < kSuffix.size()) return false;
-    const auto base = canonical.size() - kSuffix.size();
-    for (std::size_t index = 0; index < kSuffix.size(); ++index) {
-        const auto character = std::tolower(static_cast<unsigned char>(canonical[base + index]));
-        if (character != kSuffix[index]) return false;
-    }
-    return true;
+    constexpr std::string_view kSuffix      = ".class";
+    constexpr std::string_view kSuffixSlash = ".class/";
+    const auto endsWith = [&canonical](std::string_view suffix) {
+        return canonical.size() >= suffix.size() &&
+               canonical.compare(canonical.size() - suffix.size(), suffix.size(), suffix) == 0;
+    };
+    return endsWith(kSuffixSlash) || endsWith(kSuffix);
 }
 
 /// 输出扩展名是否 .zip（大小写不敏感，与共享层 input_ext 口径一致）。
@@ -399,11 +400,11 @@ ca::Result<BatchDecompileReport, DecompileError> decompileJarBatch(
         const auto verdict = classifyEntryNameForDisk(rawName);
         if (verdict.safe) continue;
         excludedRawNames.push_back(rawName);
-        //披露名截断到可读长度（敌意名可上万字节；原始字节展示无意义）。
-        std::string display = canonical;
-        if (display.size() > kSkippedDisplayLimit)
-            display = display.substr(0, kSkippedDisplayLimit) + "…";
-        report.skipped.push_back({std::move(display), verdict.reason});
+        //披露名截断到可读长度（敌意名可上万字节；原始字节展示无意义）。走
+        //共享层 UTF-8 边界回退口径：纯字节切可落进多字节序列中间产出非法
+        //UTF-8，渲染期经 Utf8StringBuilder 软失败会把该条披露吞成空行。
+        report.skipped.push_back({truncateUtf8(canonical, kSkippedDisplayLimit),
+                                  verdict.reason});
     }
     std::sort(report.skipped.begin(), report.skipped.end(),
               [](const SkippedEntry& left, const SkippedEntry& right) {

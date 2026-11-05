@@ -57,6 +57,7 @@ mjt.cli.fix.reason.invalid_class_entry=.class 条目无法识别为合法 class 
 mjt.cli.fix.reason.corrupt_output_marker=资源名命中已知损坏输出标记
 mjt.cli.err.fix_same_path=输入与输出必须是不同文件: {0}
 mjt.cli.err.mapping_same_path=输入与输出必须是不同文件: {0}
+mjt.cli.err.invalid_value={0} 的值无效: {1}
 mjt.cli.err.fix_output_busy=无法替换已存在的输出文件: {0}
 
 # ── decompile ───────────────────────────────────────────────
@@ -68,12 +69,10 @@ mjt.cli.decompile.jar_help=显式反编译器 JAR 路径
 mjt.cli.decompile.timeout_help=子进程超时（毫秒，缺省 120000）
 mjt.cli.decompile.memory_help=后端 JVM 最大堆内存 MiB（缺省 1024）
 mjt.cli.decompile.err.need_mode=需要 -c <class>（单类模式）或 -o <outdir|.zip>（批量模式）之一
-mjt.cli.decompile.err.batch_output_missing=批量模式需要输出路径（-o <outdir> 或 <out>.zip）
 mjt.cli.decompile.err.need_all=批量反编译会处理 jar 内全部 {0} 个类；加 --all 确认执行
 mjt.cli.decompile.err.single_output_java=单类输出的 -o 必须是 .java 文件（或省略 -o 打印到 stdout）
 mjt.cli.decompile.err.class_not_found=jar 内未找到类: {0}
 mjt.cli.decompile.err.open_failed=无法打开 jar: {0}
-mjt.cli.decompile.err.invalid_value={0} 的值无效: {1}
 mjt.cli.decompile.err.stage_failed=暂存失败: {0}
 mjt.cli.decompile.err.readback_failed=无法读回反编译产物: {0}
 mjt.cli.decompile.err.temp_failed=无法创建反编译临时目录
@@ -146,6 +145,7 @@ mjt.cli.classes.err.invalid_kind=--kind 值无效: {0}（应为 class / interfac
 mjt.cli.classes.err.invalid_origin=--origin 值无效: {0}（应为 jdk / known / unknown）
 mjt.cli.classes.err.invalid_limit=--limit 必须是正整数: {0}
 mjt.cli.classes.err.open_failed=无法打开 jar: {0}
+mjt.cli.classes.err.analysis_failed=jar 分析失败: {0}
 mjt.cli.classes.err.write_failed=无法写出输出文件: {0}
 
 # ── disasm ──────────────────────────────────────────────────
@@ -155,6 +155,7 @@ mjt.cli.disasm.output_help=jasm 文本写入文件；stdout 只留文本
 mjt.cli.disasm.written=jasm 文本已写出: {0}
 mjt.cli.disasm.err.class_not_found=jar 中找不到类: {0}
 mjt.cli.disasm.err.open_failed=无法打开 jar: {0}
+mjt.cli.disasm.err.class_info_failed=读取类信息失败: {0}
 mjt.cli.disasm.err.disasm_failed=反汇编失败: {0}
 mjt.cli.disasm.err.write_failed=无法写出输出文件: {0}
 
@@ -167,3 +168,4 @@ mjt.cli.subs.class_kind=类形态: {0}
 mjt.cli.subs.counted=字段: {0}, 方法: {1}
 mjt.cli.subs.err.class_not_found=jar 中找不到类: {0}
 mjt.cli.subs.err.open_failed=无法打开 jar: {0}
+mjt.cli.subs.err.class_info_failed=读取类信息失败: {0}

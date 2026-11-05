@@ -96,7 +96,7 @@ ca::Result<ClassesReport, ClassesError> collectClasses(const std::string& jarPat
     TempDbGuard guard{tempDbPath()};
     auto dbResult = mjbase::project::AnalysisDb::open(refOf(guard.path()));
     if (dbResult.is_err()) return ca::Err(classesError(ClassesError::Kind::Runtime,
-                                                       "mjt.cli.classes.err.open_failed",
+                                                       "mjt.cli.classes.err.analysis_failed",
                                                        {dbError(std::move(dbResult).unwrap_err())
                                                             .message}));
     auto db = std::move(dbResult).unwrap();
@@ -104,21 +104,21 @@ ca::Result<ClassesReport, ClassesError> collectClasses(const std::string& jarPat
     auto ingested = workspace::ingestIntoAnalysisDb(ws, db);
     if (ingested.is_err()) {
         workspace::WorkspaceErrorInfo info = ingestError(std::move(ingested).unwrap_err());
-        return ca::Err(classesError(ClassesError::Kind::Runtime, "mjt.cli.classes.err.open_failed",
-                                    {info.message}));
+        return ca::Err(classesError(ClassesError::Kind::Runtime,
+                                    "mjt.cli.classes.err.analysis_failed", {info.message}));
     }
     auto inputId = workspace::resolveCensusInput(db, ws.sourcePath());
     if (inputId.is_err()) {
         workspace::WorkspaceErrorInfo info = censusError(std::move(inputId).unwrap_err());
-        return ca::Err(classesError(ClassesError::Kind::Runtime, "mjt.cli.classes.err.open_failed",
-                                    {info.message}));
+        return ca::Err(classesError(ClassesError::Kind::Runtime,
+                                    "mjt.cli.classes.err.analysis_failed", {info.message}));
     }
 
     auto rows = mapClassRowsError(db.censusClasses(inputId.unwrap()));
     if (rows.is_err()) {
         workspace::WorkspaceErrorInfo info = std::move(rows).unwrap_err();
-        return ca::Err(classesError(ClassesError::Kind::Runtime, "mjt.cli.classes.err.open_failed",
-                                    {info.message}));
+        return ca::Err(classesError(ClassesError::Kind::Runtime,
+                                    "mjt.cli.classes.err.analysis_failed", {info.message}));
     }
     // DbClassCensusRow 携 move-only Utf8String：unwrap 走移动重载，一次取值。
     auto censusRows = std::move(rows).unwrap();

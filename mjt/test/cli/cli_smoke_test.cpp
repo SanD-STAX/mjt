@@ -185,6 +185,17 @@ TEST(MjtCliSmokeTest, DecompileNonPositiveLimitsAreUsageErrors)
               1);
 }
 
+TEST(MjtCliSmokeTest, DecompileOverflowMemoryValueIsUsageError)
+{
+    const auto jar = cli_fixture::writeInfoJar();
+    // i64 解析成功但超共享层 i32 字段上界：按用法错误拒绝（而非溢出回绕后
+    // 落运行失败 2）。
+    const auto run = runCli("decompile -i \"" + jar.string() +
+                            "\" -c fixture/Alpha --max-memory-mib 99999999999");
+    EXPECT_EQ(run.exitCode, 1);
+    EXPECT_NE(run.output.find("99999999999"), std::string::npos);
+}
+
 TEST(MjtCliSmokeTest, DecompileZipOutputWithCfrIsUsageError)
 {
     const auto jar = cli_fixture::writeInfoJar();
