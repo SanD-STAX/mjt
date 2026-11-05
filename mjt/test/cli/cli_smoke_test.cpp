@@ -119,6 +119,18 @@ TEST(MjtCliSmokeTest, MappingCommandConvertsThreeFamilies)
     EXPECT_NE(cli_fixture::readFileText(tinyPath).find("tiny\t2\t0"), std::string::npos);
 }
 
+TEST(MjtCliSmokeTest, MappingSamePathIsUsageError)
+{
+    const auto srgPath = cli_fixture::writeTextFile("mjt_cli_smoke_same.srg",
+                                                    cli_fixture::srgMappingText());
+    const auto run =
+        runCli("mapping -i \"" + srgPath.string() + "\" -o \"" + srgPath.string() +
+               "\" --from srg --to tiny-v2");
+    EXPECT_EQ(run.exitCode, 1);
+    // 防自毁：输入 mapping 原文仍在。
+    EXPECT_NE(cli_fixture::readFileText(srgPath).find("CL: fixture/Alpha"), std::string::npos);
+}
+
 TEST(MjtCliSmokeTest, DecompileHelpListsCommand)
 {
     const auto run = runCli("--help");
@@ -217,6 +229,41 @@ TEST(MjtCliSmokeTest, ClassesInvalidKindIsUsageError)
     const auto run = runCli("classes -i \"" + jar.string() + "\" --kind struct");
     EXPECT_EQ(run.exitCode, 1);
     EXPECT_NE(run.output.find("struct"), std::string::npos);
+}
+
+TEST(MjtCliSmokeTest, ClassesOutputFileBypassesLimitSanityCap)
+{
+    const auto jar = cli_fixture::writeClassesJar();
+
+    // stdout 路径：--limit 2 截断并提示放大。
+    const auto stdoutRun = runCli("classes -i \"" + jar.string() + "\" --limit 2");
+    EXPECT_EQ(stdoutRun.exitCode, 0);
+    EXPECT_NE(stdoutRun.output.find("matched: 9 of 9 jar classes; showing 2"), std::string::npos);
+    EXPECT_NE(stdoutRun.output.find("truncated"), std::string::npos);
+
+    // -o 路径：防呆上限不作用，完整清单落盘（无截断提示）。
+    const auto outFile = test::getTempOutPath("mjt_cli_smoke_classes_full.txt");
+    std::error_code ec;
+    std::filesystem::remove(outFile, ec);
+    const auto run =
+        runCli("classes -i \"" + jar.string() + "\" --limit 2 -o \"" + outFile.string() + "\"");
+    EXPECT_EQ(run.exitCode, 0);
+    EXPECT_NE(run.output.find("list written to"), std::string::npos);
+    const auto text = cli_fixture::readFileText(outFile);
+    EXPECT_NE(text.find("matched: 9 of 9 jar classes; showing 9"), std::string::npos);
+    EXPECT_EQ(text.find("truncated"), std::string::npos);
+    // 库序末行在列（internal_name BINARY 升序：sun/misc/Stub 收尾）。
+    EXPECT_NE(text.find("sun/misc/Stub class jdk"), std::string::npos);
+
+    // JSON 同形落盘：limit 归一为清单行数（无截断机读口径）。
+    const auto jsonOut = test::getTempOutPath("mjt_cli_smoke_classes_full.json");
+    std::filesystem::remove(jsonOut, ec);
+    const auto jsonRun = runCli("classes -i \"" + jar.string() + "\" --limit 2 --json -o \"" +
+                                jsonOut.string() + "\"");
+    EXPECT_EQ(jsonRun.exitCode, 0);
+    const auto json = cli_fixture::readFileText(jsonOut);
+    EXPECT_NE(json.find("\"limit\": 9"), std::string::npos);
+    EXPECT_NE(json.find("\"truncated\": false"), std::string::npos);
 }
 
 TEST(MjtCliSmokeTest, DisasmCommandPrintsJasmAndReportsMissingClass)

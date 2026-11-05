@@ -4,8 +4,9 @@
 ///
 /// 地基：census 投影（censusClasses，class_kind 与 library_origin 为投影层
 /// 派生列，与 info 同源同果）。行序 = 库序（internal_name BINARY 升序，跨
-/// 平台确定）；过滤项组合 = 交集；输出必经 --limit 截断（缺省 10000），截断
-/// 时提示按 total 放大或加过滤项。纯文本面，不依赖反编译器。
+/// 平台确定）；过滤项组合 = 交集；stdout 列表经 --limit 防呆截断（缺省
+/// 10000），截断时提示按 total 放大或加过滤项；-o 落盘完整清单（无界上限
+/// 调入，见 main.cpp runClasses）。纯文本面，不依赖反编译器。
 #include "commands.hpp"
 
 #include <algorithm>

@@ -149,8 +149,9 @@ struct FixReport
 
 /// @brief 诊断 + 修复一个 jar 并导出：workspace applyJarRepair（移除无效
 ///        class 条目与损坏输出标记条目）→ exportJar 落盘 @p outJar。
-/// @note @p outJar 若已存在会被先删除（exportJar 只接受此前不存在的路径）；
-///        打不开 jar、修复提交或导出失败走错误通道（退出码 2）。
+/// @note @p outJar 已存在时在导出前删除（exportJar 只接受此前不存在的路径；
+///        删除推迟到修复成功之后，坏输入不毁已有产物）；删除失败、打不开
+///        jar、修复提交或导出失败走错误通道（退出码 2）。
 ca::Result<FixReport, workspace::WorkspaceErrorInfo> fixJar(const std::string& inJar,
                                                             const std::string& outJar);
 
@@ -402,7 +403,8 @@ struct ClassesRow
     std::string origin;       ///< libraryOriginName 稳定名（jdk / known / unknown）
 };
 
-/// @brief 一次类清单查询的报告（有界输出；渲染与断言共用）。
+/// @brief 一次类清单查询的报告（渲染与断言共用；-o 落盘路径见
+///        collectClasses）。
 struct ClassesReport
 {
     std::string jarPath;      ///< 输入 jar 路径（原样回显）
@@ -410,7 +412,8 @@ struct ClassesReport
     std::string originFilter; ///< --origin 归一值（小写；空 = 不过滤）
     ca::i64     classesInJar = 0; ///< jar 内类总数（过滤前口径，对账列）
     ca::i64     total        = 0; ///< 过滤后总行数
-    ca::i64     limit        = 10000; ///< --limit（生效值，防呆上限）
+    ca::i64     limit        = 10000; ///< --limit（生效值；stdout 防呆上限，
+                                          ///  -o 全量路径归一为清单行数）
     bool        truncated    = false; ///< true = total > limit，classes 只含前 limit 行
     /// @brief 类清单行（censusClasses 库序 = internal_name BINARY 升序）。
     std::vector<ClassesRow> classes;
@@ -421,8 +424,9 @@ struct ClassesReport
 ///
 /// 过滤项组合语义：--kind 与 --origin 都给 = 交集；两者都缺 = 全量。
 /// --kind / --origin 值大小写不敏感，未知名返回 InvalidArgument；--limit < 1
-/// 返回 InvalidArgument。输出必经 --limit 截断（缺省 10000）——4179 类语料
-/// 全量 4179 行尚可接受，更大的 jar 无界输出是事故。
+/// 返回 InvalidArgument。stdout 列表经 --limit 截断（缺省 10000 防呆——
+/// 更大的 jar 无界输出是事故）；CLI 的 -o 落盘路径以无界上限调入取完整
+/// 清单（main.cpp runClasses）。
 ca::Result<ClassesReport, ClassesError> collectClasses(const std::string& jarPath,
                                                        const std::string& kindFilter,
                                                        const std::string& originFilter,

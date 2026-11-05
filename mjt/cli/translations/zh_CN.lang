@@ -56,6 +56,7 @@ mjt.cli.fix.reason.invalid_class=class 字节未通过字节码校验
 mjt.cli.fix.reason.invalid_class_entry=.class 条目无法识别为合法 class 字节
 mjt.cli.fix.reason.corrupt_output_marker=资源名命中已知损坏输出标记
 mjt.cli.err.fix_same_path=输入与输出必须是不同文件: {0}
+mjt.cli.err.mapping_same_path=输入与输出必须是不同文件: {0}
 mjt.cli.err.fix_output_busy=无法替换已存在的输出文件: {0}
 
 # ── decompile ───────────────────────────────────────────────
@@ -129,10 +130,10 @@ mjt.cli.xref.err.open_failed=无法打开 jar: {0}
 mjt.cli.xref.err.scan_failed=引用扫描失败: {0}
 
 # ── classes ─────────────────────────────────────────────────
-mjt.cli.classes.help=列出 jar 类清单（形态与来源列，分析库 census 投影）；--kind / --origin 过滤可组合，输出由 --limit 有界
+mjt.cli.classes.help=列出 jar 类清单（形态与来源列，分析库 census 投影）；--kind / --origin 过滤可组合，stdout 输出由 --limit 有界；-o 落盘完整清单
 mjt.cli.classes.kind_help=按类形态过滤: class、interface、enum、record、annotation、module
 mjt.cli.classes.origin_help=按库来源过滤: jdk、known、unknown
-mjt.cli.classes.limit_help=类行数上限（缺省 10000）；截断后按提示放大或加过滤项
+mjt.cli.classes.limit_help=stdout 类行数上限（缺省 10000）；截断后按提示放大或加过滤项；-o 恒落盘完整清单
 mjt.cli.classes.json_help=以 JSON 输出同一数据
 mjt.cli.classes.output_help=完整清单写入文件；stdout 只留摘要
 mjt.cli.classes.title=classes: {0}

@@ -120,7 +120,7 @@ Extracts constant-pool strings from the jar's classes (whole jar, or a single cl
 mjt xref -i <jar> -c <internalName> [-m <member>] [--direction to|from|both] [--limit N] [--json]
 ```
 
-Reverse-lookups the direct references around a class or member. `to` (default) finds every site whose encoded target is the class (method calls and field accesses owned by it, type instructions and class-header declarations naming it); `from` finds every reference emitted by the class's own methods; `both` is the union (self-edges deduplicated). `-m <member>` narrows to one member: `name` matches across descriptors, `name(descriptor)` (e.g. `act(I)V`) is an exact match. The class must exist in the jar; unknown selectors exit `1`.
+Reverse-lookups the direct references around a class or member. `to` (default) finds every site whose encoded target is the class (method calls and field accesses owned by it, type instructions and class-header declarations naming it); `from` finds every reference emitted by the class's own methods; `both` is the union (self-edges deduplicated). `-m <member>` narrows to one member: `name` matches across descriptors, `name(descriptor)` (e.g. `act(I)V`) is an exact match. The class must exist in the jar; an unknown class or a malformed member selector exits `1`, while a member selector that matches nothing yields an empty result with exit `0`.
 
 Output is always bounded: `--limit` caps the reference list (default `200`); when more matches exist the report says `total` and asks for a larger `--limit` — obfuscated jars can reach millions of rows and unbounded output is an incident. Each reference line shows kind (`method` / `field` / `type`), source (`class.method(desc)@insn` or `(class header)` for class-level sites) and target (`owner.name(desc)` or the type name).
 
@@ -130,7 +130,7 @@ Output is always bounded: `--limit` caps the reference list (default `200`); whe
 mjt classes -i <jar> [--kind class|interface|enum|record|annotation|module] [--origin jdk|known|unknown] [--limit N] [--json] [-o <file>]
 ```
 
-Lists every class in the jar (internal name + kind + origin columns) from the analysis census projection — the same derived columns as `mjt info`. `--kind` filters by class kind, `--origin` by package-prefix origin (`jdk` / `known` / `unknown`); both combine as an intersection and values are case-insensitive. Rows are ordered by internal name (byte order, stable across platforms). Output is always bounded: `--limit` caps the list (default `10000`); when more rows match, the report shows `total` and asks for a higher limit or tighter filters. With `-o` the full list goes to a file and stdout keeps the summary; `--json` emits the same data with stable English keys.
+Lists every class in the jar (internal name + kind + origin columns) from the analysis census projection — the same derived columns as `mjt info`. `--kind` filters by class kind, `--origin` by package-prefix origin (`jdk` / `known` / `unknown`); both combine as an intersection and values are case-insensitive. Rows are ordered by internal name (byte order, stable across platforms). Output is bounded on stdout: `--limit` caps the printed list (default `10000`); when more rows match, the report shows `total` and asks for a higher limit or tighter filters. `-o` bypasses the cap — the full list goes to a file and stdout keeps the summary; `--json` emits the same data with stable English keys.
 
 ### `mjt disasm` — single-class jasm text
 

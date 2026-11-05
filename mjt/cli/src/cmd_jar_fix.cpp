@@ -4,8 +4,9 @@
 ///
 /// 修复策略（v1 固定，与 workspace JarRepairRequest 两旗标对齐）：移除无法
 /// 解析/校验的 class 条目（invalid_class / invalid_class_entry）与已知损坏
-/// 输出标记条目（corrupt_output_marker）；其余问题保留并披露。输出 jar 必须
-/// 是新路径——已存在时先删除（exportJar 只接受此前不存在的输出）。
+/// 输出标记条目（corrupt_output_marker）；其余问题保留并披露。输出 jar 走
+/// 覆盖写：旧输出在导出前一刻删除（exportJar 只接受此前不存在的输出），
+/// 打不开输入或修复失败时不删——上一份有效产物得以保留。
 #include "commands.hpp"
 
 #include <algorithm>
@@ -31,9 +32,7 @@ ca::str::Utf8StringRef refOf(const std::string& value)
 ca::Result<FixReport, workspace::WorkspaceErrorInfo> fixJar(const std::string& inJar,
                                                             const std::string& outJar)
 {
-    // exportJar 契约是「此前不存在的输出」：CLI 语义取覆盖写（先删旧输出，
-    // 删除失败按运行失败处理）。输入输出同路径在这里挡下（usage 校验归
-    // main，此处兜底防自毁）。
+    // 输入输出同路径在这里挡下（usage 校验归 main，此处兜底防自毁）。
     std::error_code canonicalEc;
     const auto inCanonical  = std::filesystem::weakly_canonical(inJar, canonicalEc);
     const auto outCanonical = std::filesystem::weakly_canonical(outJar, canonicalEc);
@@ -41,14 +40,6 @@ ca::Result<FixReport, workspace::WorkspaceErrorInfo> fixJar(const std::string& i
         workspace::WorkspaceErrorInfo info;
         info.code    = workspace::WorkspaceError::InvalidArgument;
         info.message = shared::trfStr("mjt.cli.err.fix_same_path", {outJar});
-        return ca::Err(std::move(info));
-    }
-    std::error_code fsEc;
-    std::filesystem::remove(outJar, fsEc);
-    if (std::filesystem::exists(outJar)) {
-        workspace::WorkspaceErrorInfo info;
-        info.code    = workspace::WorkspaceError::PermissionDenied;
-        info.message = shared::trfStr("mjt.cli.err.fix_output_busy", {outJar});
         return ca::Err(std::move(info));
     }
 
@@ -76,6 +67,18 @@ ca::Result<FixReport, workspace::WorkspaceErrorInfo> fixJar(const std::string& i
                   if (left.uri != right.uri) return left.uri < right.uri;
                   return left.kind < right.kind;
               });
+
+    // 覆盖写（exportJar 契约是「此前不存在的输出」，删除失败按运行失败
+    // 处理）：删旧输出推迟到导出前一刻——输入打不开或修复失败时上一份
+    // 有效产物原样保留。
+    std::error_code fsEc;
+    std::filesystem::remove(outJar, fsEc);
+    if (std::filesystem::exists(outJar)) {
+        workspace::WorkspaceErrorInfo info;
+        info.code    = workspace::WorkspaceError::PermissionDenied;
+        info.message = shared::trfStr("mjt.cli.err.fix_output_busy", {outJar});
+        return ca::Err(std::move(info));
+    }
 
     auto exported = ws.exportJar(refOf(outJar));
     if (exported.is_err()) return ca::Err(std::move(exported).unwrap_err());

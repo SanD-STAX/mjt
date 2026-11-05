@@ -167,7 +167,8 @@ mjt xref -i <jar> -c <internalName> [-m <member>] [--direction to|from|both] [--
 方法调用与字段访问、指向它的类型指令与类头声明）；`from` 找该类方法体发出
 的全部引用；`both` 为并集（自引用边去重）。`-m <member>` 收缩到单个成员：
 `name` 跨描述符匹配，`name(descriptor)`（如 `act(I)V`）精确匹配。类必须
-存在于 jar；选择器无命中退出码 `1`。
+存在于 jar；类名无命中或成员选择器语法非法退出码 `1`，成员选择器合法但
+无命中输出空结果、退出码 `0`。
 
 输出恒有界：`--limit` 限制引用行数（缺省 `200`）；超出时报告 `total` 并
 提示放大 `--limit`——混淆 jar 反查可达百万行，无界输出是事故。每行引用含
@@ -183,9 +184,10 @@ mjt classes -i <jar> [--kind class|interface|enum|record|annotation|module] [--o
 列出 jar 内全部类（内部名 + 形态 + 来源三列），数据来自分析库 census 投影——
 与 `mjt info` 同源同果的派生列。`--kind` 按类形态过滤，`--origin` 按包前缀
 来源过滤（`jdk` / `known` / `unknown`）；两者可组合（交集），值大小写不敏感。
-行序 = 内部名字节序升序（跨平台确定）。输出恒有界：`--limit` 限制行数（缺省
-`10000`）；超出时报告 `total` 并提示放大上限或加过滤项。带 `-o` 时完整清单
-写文件、stdout 只留摘要；`--json` 输出同一数据（键为稳定英文）。
+行序 = 内部名字节序升序（跨平台确定）。输出缺省有界：`--limit` 限制 stdout
+列表行数（缺省 `10000`）；超出时报告 `total` 并提示放大上限或加过滤项。
+`-o` 不经防呆上限——完整清单写文件、stdout 只留摘要；`--json` 输出同一数据
+（键为稳定英文）。
 
 ### `mjt disasm` — 单类 jasm 文本
 

@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <fstream>
 #include <string>
 #include <vector>
 
@@ -93,6 +94,21 @@ TEST(MjtCliJarFixTest, RejectsSameInputOutputPath)
     ASSERT_TRUE(result.is_err());
     // 防自毁：输入原文件仍在。
     EXPECT_TRUE(std::filesystem::is_regular_file(inJar));
+}
+
+TEST(MjtCliJarFixTest, KeepsExistingOutputWhenInputFailsToOpen)
+{
+    // 非 jar 输入（文本冒充 .jar）：openJar 失败，且上一份有效输出必须
+    // 原样保留（删旧输出已推迟到导出前一刻）。
+    const auto inJar  = cli_fixture::writeTextFile("mjt_cli_fix_bad_input.jar", "not a jar");
+    const auto outJar = test::getTempOutPath("mjt_cli_fix_previous.jar");
+    {
+        std::ofstream out(outJar, std::ios::binary);
+        out << "previous good output";
+    }
+    auto result = mjt::cli::fixJar(inJar.string(), outJar.string());
+    ASSERT_TRUE(result.is_err());
+    EXPECT_EQ(cli_fixture::readFileText(outJar), "previous good output");
 }
 
 TEST(MjtCliJarFixTest, RendersReportText)

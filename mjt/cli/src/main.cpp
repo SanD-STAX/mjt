@@ -15,6 +15,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <string>
 
 #include "libca/opt/opt.hpp"
@@ -64,6 +65,16 @@ bool requireInputFile(const std::string& path)
     return std::filesystem::is_regular_file(path, ec);
 }
 
+/// 输入与输出是否同一文件（weakly_canonical 归一比较，fixJar 核心兜底同款
+/// 口径）。归一失败按「不同」放行，交由后续写路径报错。
+bool isSamePath(const std::string& left, const std::string& right)
+{
+    std::error_code ec;
+    const auto leftCanonical  = std::filesystem::weakly_canonical(left, ec);
+    const auto rightCanonical = std::filesystem::weakly_canonical(right, ec);
+    return !ec && leftCanonical == rightCanonical;
+}
+
 /// `mjt info -i <jar> [--json]`。
 int runInfo(const ca::opt::ParseResult& args)
 {
@@ -91,6 +102,10 @@ int runMapping(const ca::opt::ParseResult& args)
     if (!requireInputFile(input))
         return usageFailure(mjt::shared::trfStr("mjt.cli.err.input_missing", {input}));
     if (output.empty()) return usageFailure(mjt::shared::trfStr("mjt.cli.err.output_missing"));
+    // 同路径防自毁（usage 校验归 main）：mapping 文本走裸 ofstream 落盘，
+    // 原地覆盖即数据丢失。
+    if (isSamePath(input, output))
+        return usageFailure(mjt::shared::trfStr("mjt.cli.err.mapping_same_path", {output}));
 
     std::string mappingText;
     if (!mjt::readTextFile(input, mappingText))
@@ -129,6 +144,9 @@ int runMapping(const ca::opt::ParseResult& args)
         }
         if (!requireInputFile(remap.jarPath))
             return usageFailure(mjt::shared::trfStr("mjt.cli.err.input_missing", {remap.jarPath}));
+        if (isSamePath(remap.jarPath, remap.outputPath))
+            return usageFailure(
+                mjt::shared::trfStr("mjt.cli.err.mapping_same_path", {remap.outputPath}));
         auto remapped = mjt::cli::remapJarWithMapping(remap);
         if (remapped.is_err()) {
             const auto error = std::move(remapped).unwrap_err();
@@ -151,6 +169,9 @@ int runJarFix(const ca::opt::ParseResult& args)
     if (!requireInputFile(input))
         return usageFailure(mjt::shared::trfStr("mjt.cli.err.input_missing", {input}));
     if (output.empty()) return usageFailure(mjt::shared::trfStr("mjt.cli.err.output_missing"));
+    // 同路径防自毁（usage 校验归 main，fixJar 核心内另有兜底）。
+    if (isSamePath(input, output))
+        return usageFailure(mjt::shared::trfStr("mjt.cli.err.fix_same_path", {output}));
 
     auto report = mjt::cli::fixJar(input, output);
     if (report.is_err())
@@ -348,16 +369,22 @@ int runClasses(const ca::opt::ParseResult& args)
     if (args.has("limit") && !parsePositiveInteger(args.get("limit"), "--limit", limit))
         return mjt::cli::kExitUsage;
 
-    auto report = mjt::cli::collectClasses(input, args.get("kind"), args.get("origin"), limit);
+    // --limit 防呆只作用于 stdout 列表；-o 落盘完整清单（README 同文）——以
+    // 无界上限调入，limit 字段归一为清单行数（truncated 恒 false）。
+    const bool toFile = !output.empty();
+    auto report =
+        mjt::cli::collectClasses(input, args.get("kind"), args.get("origin"),
+                                 toFile ? std::numeric_limits<ca::i64>::max() : limit);
     if (report.is_err()) {
         const auto error = std::move(report).unwrap_err();
         const bool usage = error.kind != mjt::cli::ClassesError::Kind::Runtime;
         return usage ? usageFailure(error.message) : runFailure(error.message);
     }
-    const auto value = std::move(report).unwrap();
+    auto value = std::move(report).unwrap();
+    if (toFile) value.limit = static_cast<ca::i64>(value.classes.size());
 
     // -o 重定向主输出（文本/JSON 同形落盘），stdout 只留摘要行。
-    if (!output.empty()) {
+    if (toFile) {
         std::FILE* file = std::fopen(output.c_str(), "wb");
         if (file == nullptr)
             return runFailure(mjt::shared::trfStr("mjt.cli.classes.err.write_failed", {output}));

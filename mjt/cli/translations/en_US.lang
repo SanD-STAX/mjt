@@ -56,6 +56,7 @@ mjt.cli.fix.reason.invalid_class=class bytes did not pass bytecode validation
 mjt.cli.fix.reason.invalid_class_entry=a .class entry was not recognized as valid class bytes
 mjt.cli.fix.reason.corrupt_output_marker=resource name matches a known corrupt output marker
 mjt.cli.err.fix_same_path=input and output must be different files: {0}
+mjt.cli.err.mapping_same_path=input and output must be different files: {0}
 mjt.cli.err.fix_output_busy=cannot replace the existing output file: {0}
 
 # ── decompile ───────────────────────────────────────────────
@@ -129,10 +130,10 @@ mjt.cli.xref.err.open_failed=cannot open jar: {0}
 mjt.cli.xref.err.scan_failed=reference scan failed: {0}
 
 # ── classes ─────────────────────────────────────────────────
-mjt.cli.classes.help=list jar classes with kind and origin columns (analysis census projection); --kind / --origin filters combine, output is bounded by --limit
+mjt.cli.classes.help=list jar classes with kind and origin columns (analysis census projection); --kind / --origin filters combine, stdout output is bounded by --limit; -o writes the full list
 mjt.cli.classes.kind_help=filter by class kind: class, interface, enum, record, annotation, module
 mjt.cli.classes.origin_help=filter by library origin: jdk, known, unknown
-mjt.cli.classes.limit_help=maximum number of class rows (default 10000); raise it or add filters after the truncation hint
+mjt.cli.classes.limit_help=maximum number of class rows printed to stdout (default 10000); raise it or add filters after the truncation hint; -o always writes the full list
 mjt.cli.classes.json_help=emit the same data as JSON
 mjt.cli.classes.output_help=write the full list to a file; stdout keeps the summary only
 mjt.cli.classes.title=classes: {0}
