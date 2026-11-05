@@ -5,12 +5,15 @@
 #pragma once
 
 #include <algorithm>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "jbc/jbc.hpp"
@@ -19,6 +22,7 @@
 #include "libca/zip/checksum.hpp"
 
 #include "shared/decompiler.hpp"
+#include "shared/output_sink.hpp"
 
 #include "mjbase/jar/jar_reader.hpp"
 #include "mjbase/jar/jar_writer.hpp"
@@ -73,6 +77,172 @@ inline void writeRawZip(const std::filesystem::path& path,
               static_cast<std::streamsize>(bytes.size()));
     out.close();
     if (!out) throw std::runtime_error("failed to write raw zip fixture: " + path.string());
+}
+
+/// OutputSink 捕获：临时文件 FILE* 读写往返（各命令测试的渲染断言共用）。
+class CapturedSink
+{
+public:
+    CapturedSink()
+        : file_(std::tmpfile())
+        , sink_(file_)
+    {}
+    ~CapturedSink()
+    {
+        if (file_ != nullptr) std::fclose(file_);
+    }
+    CapturedSink(const CapturedSink&)            = delete;
+    CapturedSink& operator=(const CapturedSink&) = delete;
+
+    //返回引用而非值：OutputSink 非 const 左值引用形参不能绑右值（MSVC 扩展
+    //放行、g++ 拒绝——linux CI 实证）。
+    mjt::OutputSink& sink() { return sink_; }
+
+    std::string text()
+    {
+        std::fflush(file_);
+        std::rewind(file_);
+        std::string out;
+        char        buffer[4096];
+        std::size_t read = 0;
+        while ((read = std::fread(buffer, 1, sizeof(buffer), file_)) > 0) out.append(buffer, read);
+        return out;
+    }
+
+private:
+    std::FILE*      file_ = nullptr;
+    mjt::OutputSink sink_;
+};
+
+// ── 类文件字节手术（disasm/subs 失败分支语料）────────────────────
+
+/// u16 大端读取（语料改造专用，语料是测试前提，不做越界防护）。
+inline ca::usize readU2(const std::vector<ca::u8>& bytes, std::size_t offset)
+{
+    return (static_cast<ca::usize>(bytes[offset]) << 8) | bytes[offset + 1];
+}
+
+/// u32 大端读取。
+inline ca::u32 readU4(const std::vector<ca::u8>& bytes, std::size_t offset)
+{
+    return (static_cast<ca::u32>(bytes[offset]) << 24) |
+           (static_cast<ca::u32>(bytes[offset + 1]) << 16) |
+           (static_cast<ca::u32>(bytes[offset + 2]) << 8) | bytes[offset + 3];
+}
+
+/// 常量池单条目步进：返回 {下一偏移, 槽位步进}（long/double 占两槽）。
+inline std::pair<std::size_t, ca::usize> cpEntryStep(const std::vector<ca::u8>& bytes,
+                                                     std::size_t                offset)
+{
+    switch (bytes[offset]) {
+    case 1: return {offset + 3 + readU2(bytes, offset + 1), 1};   // Utf8
+    case 3:
+    case 4: return {offset + 5, 1};   // Integer / Float
+    case 5:
+    case 6: return {offset + 9, 2};   // Long / Double（双槽）
+    case 15: return {offset + 3, 1};  // MethodHandle（u1 kind + u2 index）
+    case 7:
+    case 8:
+    case 16:
+    case 19:
+    case 20: return {offset + 3, 1};  // Class / String / MethodType / Module / Package
+    default: return {offset + 5, 1};  // 9-12 引用族 / 13 NameAndType / 17-18 Dynamic 族
+    }
+}
+
+/// 在属性表内按名字找首个属性载荷起点（utf8ByIndex 供 name_index 解析）；
+/// 命中 Code 时下钻其嵌套属性表。未命中返回 false。
+inline bool findAttributePayload(const std::vector<ca::u8>& bytes,
+                                 const std::map<ca::usize, std::string>& utf8ByIndex,
+                                 std::size_t tableOffset, std::string_view name,
+                                 std::size_t& payloadOffset)
+{
+    const ca::usize count    = readU2(bytes, tableOffset);
+    std::size_t     offset   = tableOffset + 2;
+    for (ca::usize index = 0; index < count; ++index) {
+        const ca::usize nameIndex = readU2(bytes, offset);
+        const ca::u32   length    = readU4(bytes, offset + 2);
+        const auto      it        = utf8ByIndex.find(nameIndex);
+        if (it != utf8ByIndex.end() && it->second == name) {
+            payloadOffset = offset + 6;
+            return true;
+        }
+        if (it != utf8ByIndex.end() && it->second == "Code") {
+            // Code 载荷：u2 max_stack + u2 max_locals + u4 code_length + code +
+            // u2 exception_table_length + 8*n + u2 嵌套属性表计数。
+            const std::size_t payload    = offset + 6;
+            const ca::u32     codeLength = readU4(bytes, payload + 4);
+            const std::size_t exTable    = payload + 8 + codeLength;
+            const std::size_t nested     = exTable + 2 + readU2(bytes, exTable) * 8;
+            if (findAttributePayload(bytes, utf8ByIndex, nested, name, payloadOffset))
+                return true;
+        }
+        offset += 6 + length;
+    }
+    return false;
+}
+
+/// 在成员表（字段或方法）内按名搜索属性载荷：命中时写 payloadOffset。
+/// 无论命中与否都走完整张表并返回表尾偏移——fields / methods / 类级
+/// 三张表要顺序消费，前两张的表尾就是下一张表的起点。
+inline std::pair<std::size_t, bool> findMemberAttributePayload(
+    const std::vector<ca::u8>& bytes, const std::map<ca::usize, std::string>& utf8ByIndex,
+    std::size_t tableOffset, std::string_view name, std::size_t& payloadOffset)
+{
+    const ca::usize count  = readU2(bytes, tableOffset);
+    std::size_t     cursor = tableOffset + 2;
+    bool            found  = false;
+    for (ca::usize index = 0; index < count; ++index) {
+        cursor += 6;   // access_flags / name_index / descriptor_index
+        if (findAttributePayload(bytes, utf8ByIndex, cursor, name, payloadOffset)) found = true;
+        const ca::usize attrs = readU2(bytes, cursor);
+        cursor += 2;
+        for (ca::usize attr = 0; attr < attrs; ++attr) cursor += 6 + readU4(bytes, cursor + 2);
+    }
+    return {cursor, found};
+}
+
+/// 把类字节内首个命中名字的属性载荷头两字节改写为 0xFFFF（u2 行数计数
+/// 越界，解码必失败）。disasm 失败分支语料专用：workspace 侧对 LNT 解码
+/// 失败容错跳过（classInfo 照常成功），jasm 反汇编按名强制解码即抛。
+inline std::vector<ca::u8> withCorruptAttribute(const std::vector<ca::u8>& classBytes,
+                                                std::string_view           name)
+{
+    std::map<ca::usize, std::string> utf8ByIndex;
+    std::size_t                      offset  = 8;
+    const ca::usize                  cpCount = readU2(classBytes, offset);
+    offset += 2;
+    for (ca::usize slot = 1; slot < cpCount;) {
+        const auto [next, advance] = cpEntryStep(classBytes, offset);
+        if (classBytes[offset] == 1) {
+            const ca::usize length = readU2(classBytes, offset + 1);
+            utf8ByIndex.emplace(slot, std::string(reinterpret_cast<const char*>(
+                                                          classBytes.data() + offset + 3),
+                                                      length));
+        }
+        offset = next;
+        slot += advance;
+    }
+    // access + this + super 之后是接口表，再 fields / methods / 类级属性表；
+    // 方法属性（LNT 等）藏在 methods 表的 Code 嵌套里，三张表顺序搜。
+    const std::size_t interfaces = readU2(classBytes, offset + 6);
+    std::size_t       cursor     = offset + 8 + interfaces * 2;
+    std::size_t       payload    = 0;
+    bool              found      = false;
+    auto [afterFields, fieldsHit] =
+        findMemberAttributePayload(classBytes, utf8ByIndex, cursor, name, payload);
+    cursor = afterFields;
+    found  = found || fieldsHit;
+    auto [afterMethods, methodsHit] =
+        findMemberAttributePayload(classBytes, utf8ByIndex, cursor, name, payload);
+    cursor = afterMethods;
+    found  = found || methodsHit;
+    if (!found) found = findAttributePayload(classBytes, utf8ByIndex, cursor, name, payload);
+    if (!found) throw std::runtime_error("fixture attribute not found: " + std::string(name));
+    std::vector<ca::u8> patched = classBytes;
+    patched[payload]            = 0xFF;
+    patched[payload + 1]        = 0xFF;
+    return patched;
 }
 
 /// 写一个小文本文件到测试输出目录（mapping 语料等）。

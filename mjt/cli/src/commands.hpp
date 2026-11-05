@@ -214,7 +214,8 @@ struct BatchDecompileReport
     std::string              outputPath;      ///< 输出目录或 .zip（原样回显）
     bool                     zipOutput = false; ///< true = 输出是 vineflower 归档
     ca::usize                classEntries = 0; ///< jar 内 class 条目总数
-    ca::usize                stagedEntries = 0; ///< 交给后端的条目数（原 jar 直跑 = classEntries）
+    ca::usize                stagedEntries = 0; ///< 交给后端的条目数（原 jar 直跑 =
+                                                ///  全部条目；暂存剔除 = 剔除后余量）
     std::vector<SkippedEntry> skipped;      ///< 无法落盘的条目（按名字典序）
 };
 
@@ -498,7 +499,8 @@ struct SubsMember
 struct SubsReport
 {
     std::string jarPath;      ///< 输入 jar 路径（原样回显）
-    std::string internalName; ///< 请求的类内部名（原样回显）
+    std::string internalName; ///< 请求类的内部名（classInfo 解析后的规范内名；
+                              ///  URI 形选择器会被解析，与请求原文可不同）
     std::string kind;         ///< 类形态稳定名（classifyClassKind，census 同源派生）
     ca::i64     fields  = 0;  ///< 字段数（= members 中 kind == field 行数）
     ca::i64     methods = 0;  ///< 方法数（= members 中 kind == method 行数）

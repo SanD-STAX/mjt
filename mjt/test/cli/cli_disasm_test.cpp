@@ -16,38 +16,7 @@ namespace {
 
 using mjt::cli::collectDisasm;
 
-/// OutputSink 捕获（FILE* 往返；strings 测试同款构造）。
-class CapturedSink
-{
-public:
-    CapturedSink()
-        : file_(std::tmpfile())
-        , sink_(file_)
-    {}
-    ~CapturedSink()
-    {
-        if (file_ != nullptr) std::fclose(file_);
-    }
-    CapturedSink(const CapturedSink&)            = delete;
-    CapturedSink& operator=(const CapturedSink&) = delete;
-
-    mjt::OutputSink& sink() { return sink_; }
-
-    std::string text()
-    {
-        std::fflush(file_);
-        std::rewind(file_);
-        std::string out;
-        char buffer[4096];
-        std::size_t read = 0;
-        while ((read = std::fread(buffer, 1, sizeof(buffer), file_)) > 0) out.append(buffer, read);
-        return out;
-    }
-
-private:
-    std::FILE*      file_ = nullptr;
-    mjt::OutputSink sink_;
-};
+using CapturedSink = cli_fixture::CapturedSink;
 
 }   // namespace
 
@@ -103,6 +72,69 @@ TEST(MjtCliDisasmTest, UnopenableJarIsRuntimeError)
     auto report = collectDisasm("mjt_cli_disasm_missing.jar", "fixture/Alpha");
     ASSERT_TRUE(report.is_err());
     EXPECT_EQ(report.unwrap_err().kind, mjt::cli::DisasmError::Kind::Runtime);
+}
+
+TEST(MjtCliDisasmTest, UnparsableClassBytesIsRuntimeWithInfoFailureMessage)
+{
+    // 魔数合法 + 载荷缺失：容器按 ClassResource 登记（JarUtil 只查 4 字节
+    // 魔数），URI 形选择器直命中容器键，jbc 会话解析失败 → DataLoss（非
+    // NotFound）→ class_info_failed 文案 + Runtime；区别于类缺失的用法 1。
+    mjbase::model::ResourceContainer container;
+    container.addResource("fixture/Stub.class",
+                          std::make_unique<mjbase::model::ClassResource>(
+                              "fixture/Stub.class",
+                              std::vector<ca::u8>{0xCA, 0xFE, 0xBA, 0xBE, 0x00, 0x00}));
+    const auto path = test::getTempOutPath("mjt_cli_disasm_unparsable_fixture.jar");
+    mjbase::model::ResourceHelper::exportToJar(container, path.string());
+
+    auto report = collectDisasm(path.string(), "fixture/Stub.class");
+    ASSERT_TRUE(report.is_err());
+    auto error = std::move(report).unwrap_err();
+    EXPECT_EQ(error.kind, mjt::cli::DisasmError::Kind::Runtime);
+    EXPECT_NE(error.message.find("cannot read class info"), std::string::npos);
+}
+
+TEST(MjtCliDisasmTest, RuntimeWithFirstErrorDiagnosticWhenDisassemblyFails)
+{
+    // 语料：合法类字节 + LineNumberTable 载荷行数计数改写为越界值。jasm
+    // 源带 line 指令——code_compiler 只在行表非空时写 LNT。workspace 侧
+    // classInfo 对 LNT 解码失败容错跳过（照常成功），jasm 打印机 findAttr
+    // 按名强取 LNT、解码失败抛异常 → getJasm err——打到「反汇编失败退出
+    // 码 2 + 诊断取首条 Error」聚合分支（getJasm 失败面此前零覆盖）。
+    const auto bytes = cli_fixture::withCorruptAttribute(
+        cli_fixture::assembleClass(
+            ".super java/lang/Object\n"
+            ".class public super fixture/DisasmFail {\n"
+            "  .method public static act (I)I {\n"
+            "    code: {\n"
+            "    L0:\n"
+            "      line 10\n"
+            "      iload 0\n"
+            "      line 11\n"
+            "      ifeq L1\n"
+            "      iconst_1\n"
+            "      ireturn\n"
+            "    L1:\n"
+            "      iconst_2\n"
+            "      ireturn\n"
+            "    }\n"
+            "  }\n"
+            "}\n"),
+        "LineNumberTable");
+    mjbase::model::ResourceContainer container;
+    container.addResource("fixture/DisasmFail.class",
+                          std::make_unique<mjbase::model::ClassResource>(
+                              "fixture/DisasmFail.class", bytes));
+    const auto path = test::getTempOutPath("mjt_cli_disasm_corrupt_lnt_fixture.jar");
+    mjbase::model::ResourceHelper::exportToJar(container, path.string());
+
+    auto report = collectDisasm(path.string(), "fixture/DisasmFail");
+    ASSERT_TRUE(report.is_err());
+    auto error = std::move(report).unwrap_err();
+    EXPECT_EQ(error.kind, mjt::cli::DisasmError::Kind::Runtime);
+    // disasm_failed 文案 + 首条 Error 诊断非空（聚合逻辑的真断言）。
+    EXPECT_NE(error.message.find("disassembly failed: "), std::string::npos);
+    EXPECT_GT(error.message.size(), std::string("disassembly failed: ").size());
 }
 
 TEST(MjtCliDisasmTest, OutputFileMatchesStdoutText)

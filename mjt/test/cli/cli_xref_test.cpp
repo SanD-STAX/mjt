@@ -33,38 +33,7 @@ bool findReference(const mjt::cli::XrefReport& report, const std::string& kind,
     return false;
 }
 
-/// OutputSink 捕获（FILE* 往返；strings 测试同款构造）。
-class CapturedSink
-{
-public:
-    CapturedSink()
-        : file_(std::tmpfile())
-        , sink_(file_)
-    {}
-    ~CapturedSink()
-    {
-        if (file_ != nullptr) std::fclose(file_);
-    }
-    CapturedSink(const CapturedSink&)            = delete;
-    CapturedSink& operator=(const CapturedSink&) = delete;
-
-    mjt::OutputSink& sink() { return sink_; }
-
-    std::string text()
-    {
-        std::fflush(file_);
-        std::rewind(file_);
-        std::string out;
-        char buffer[4096];
-        std::size_t read = 0;
-        while ((read = std::fread(buffer, 1, sizeof(buffer), file_)) > 0) out.append(buffer, read);
-        return out;
-    }
-
-private:
-    std::FILE*     file_ = nullptr;
-    mjt::OutputSink sink_;
-};
+using CapturedSink = cli_fixture::CapturedSink;
 
 }   // namespace
 

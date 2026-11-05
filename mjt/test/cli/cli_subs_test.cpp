@@ -24,38 +24,7 @@ const SubsMember* findMember(const mjt::cli::SubsReport& report, const std::stri
     return nullptr;
 }
 
-/// OutputSink 捕获（FILE* 往返；strings 测试同款构造）。
-class CapturedSink
-{
-public:
-    CapturedSink()
-        : file_(std::tmpfile())
-        , sink_(file_)
-    {}
-    ~CapturedSink()
-    {
-        if (file_ != nullptr) std::fclose(file_);
-    }
-    CapturedSink(const CapturedSink&)            = delete;
-    CapturedSink& operator=(const CapturedSink&) = delete;
-
-    mjt::OutputSink& sink() { return sink_; }
-
-    std::string text()
-    {
-        std::fflush(file_);
-        std::rewind(file_);
-        std::string out;
-        char buffer[4096];
-        std::size_t read = 0;
-        while ((read = std::fread(buffer, 1, sizeof(buffer), file_)) > 0) out.append(buffer, read);
-        return out;
-    }
-
-private:
-    std::FILE*      file_ = nullptr;
-    mjt::OutputSink sink_;
-};
+using CapturedSink = cli_fixture::CapturedSink;
 
 }   // namespace
 
@@ -203,4 +172,24 @@ TEST(MjtCliSubsTest, TextAndJsonRenderingsAreDeterministic)
     CapturedSink jsonAgain;
     mjt::cli::renderSubsJson(info, jsonAgain.sink());
     EXPECT_EQ(json, jsonAgain.text());
+}
+
+TEST(MjtCliSubsTest, UnparsableClassBytesIsRuntimeWithInfoFailureMessage)
+{
+    // 与 disasm 同款语料：URI 形选择器直命中容器键，jbc 会话解析失败 →
+    // DataLoss（非 NotFound）→ class_info_failed 文案 + Runtime；此前该
+    // 分支只有类缺失（用法 1）档。
+    mjbase::model::ResourceContainer container;
+    container.addResource("fixture/Stub.class",
+                          std::make_unique<mjbase::model::ClassResource>(
+                              "fixture/Stub.class",
+                              std::vector<ca::u8>{0xCA, 0xFE, 0xBA, 0xBE, 0x00, 0x00}));
+    const auto path = test::getTempOutPath("mjt_cli_subs_unparsable_fixture.jar");
+    mjbase::model::ResourceHelper::exportToJar(container, path.string());
+
+    auto report = collectSubs(path.string(), "fixture/Stub.class");
+    ASSERT_TRUE(report.is_err());
+    auto error = std::move(report).unwrap_err();
+    EXPECT_EQ(error.kind, mjt::cli::SubsError::Kind::Runtime);
+    EXPECT_NE(error.message.find("cannot read class info"), std::string::npos);
 }
