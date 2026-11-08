@@ -188,7 +188,12 @@ includes("xmake/libca_rules.lua")
 -- methodRules，applyRemap 漏斗推导注记的输入）——shadow 落分析库（DB 为
 -- renames 覆盖层唯一真源、sidecar 退役为 open 期一次性导入源）的 undo/redo
 -- 持久化前提；词条面无新增依赖。
-add_requires("mjbase 0.0.21")
+-- 0.0.22 = jasm assemble 保留原帧档 FrameMode（PR #197，mjbase#190：
+-- FrameMode{Regenerate,PreserveOriginal} + ResourceJasmService::assemble
+-- 第 5 参缺省兼容——v49 杠杆跳过 smt_build 帧序列化层（unnamed slot/
+-- returnAddress 形可救，数据流分析失败两档同败）+ fail-closed pc 对齐门；
+-- pysdk apply 族 frame 档消费本档）；词条面无新增依赖。
+add_requires("mjbase 0.0.22")
 
 includes("test_helper")
 includes("mjt")
