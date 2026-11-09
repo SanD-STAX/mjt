@@ -15,7 +15,12 @@
 # shadow sidecar 文件面（generate 幂等/prune 失配清理/缺侧车报错）→
 # decompiler_compare（fail-closed + fake java 双后端实跑）→ init_order（静态
 # 初始化拓扑序：超类边 + clinit 引用边 + 环报告 + roots 子图）→
-# class_census 文件面（#39 S0 量化基线：导出 → 读回 → 确定性 + 缺省目录）。
+# class_census 文件面（#39 S0 量化基线：导出 → 读回 → 确定性 + 缺省目录）→
+# search/xref 查询面（analysis.db DB-first，语义随 mjt #94：四档 + to/from，
+# 每命令临时库即弃、新增条目即时可见、regex 引擎回落、错误面 fail-closed）→
+# hierarchy 层次闭包面（analysis.db DB-only 无引擎回落：super_chain /
+# direct_subclasses / all_subclasses / implementors + *Paged 窗口拼接、脏树
+# 不参与、起点未登记 fail-closed）。
 # 全程合成样本（mjt.write_demo_jar），零样本字节入库。
 # 文件尾有 __main__ 兜底入口：--script 宿主 exec 的 __name__ 是 "__main__"，
 # 直接 `--script pysdk_selftest.py` 即跑全套并按 fail 数定退出码。
@@ -1122,6 +1127,200 @@ def run_all():
         check("census missing jar throws", False, "no exception")
     except RuntimeError as e:
         check("census missing jar throws", "jar not found" in str(e), str(e))
+
+    # ── 28. search/xref 查询面（analysis.db DB-first，语义随 mjt #94） ──
+    # 每命令临时库整库导入后即弃（census 同款生命周期），恒查容器落账字节；
+    # add_entry 的新增资源下一命令即时可见（新鲜 ingest，无陈旧库可失真）。
+    # contains/prefix/exact 直查库；regex 无 SQL 等价面，回落引擎活扫描。
+    p28, h28 = fresh("query")
+    names28 = mjt.search(h28, "classes", "me/demo", match_mode="prefix")
+    check("search classes prefix",
+          len(names28) == 5
+          and all(r["kind"] == "class" and r["class"] == r["value"] for r in names28)
+          and {r["class"] for r in names28} == {"me/demo/Api", "me/demo/App",
+                                                "me/demo/Color", "me/demo/Crypto",
+                                                "me/demo/Util"},
+          str(names28))
+    check("search classes case fold",
+          len(mjt.search(h28, "classes", "ME/DEMO")) == 5
+          and mjt.search(h28, "classes", "ME/DEMO", case_sensitive=True) == [],
+          "case fold")
+    check("search classes regex fallback",
+          [r["class"] for r in mjt.search(h28, "classes", r"^me/demo/Api$",
+                                          match_mode="regex")] == ["me/demo/Api"], "regex")
+    members28 = mjt.search(h28, "members", "decode")
+    check("search members decode",
+          len(members28) == 1 and members28[0]["owner"] == "me/demo/Crypto"
+          and members28[0]["kind"] == "method"
+          and members28[0]["name"] == "decode"
+          and members28[0]["value"] == "decode(II)Ljava/lang/String;", str(members28))
+    numbers28 = mjt.search(h28, "numbers", "7")
+    check("search numbers bipush",
+          any(r["owner"] == "me/demo/Crypto" and r["name"] == "decode"
+              and r["value"] == "7" and r["kind"] == "instruction_number"
+              and r["instruction_index"] >= 0 for r in numbers28), str(numbers28))
+    # 数值等值 parity："7.0" 与 "7" 同一行集（值文本存入库原文本）。
+    def hitKeys28(rows28b):
+        return [(r["resource_uri"], r["kind"], r["owner"], r["name"], r["descriptor"],
+                 r["instruction_index"], r["value"]) for r in rows28b]
+    check("search numbers parity",
+          hitKeys28(numbers28) == hitKeys28(mjt.search(h28, "numbers", "7.0")),
+          f"{numbers28} vs {mjt.search(h28, 'numbers', '7.0')}")
+    strings28 = mjt.search(h28, "strings", "demo-payload")
+    check("search strings cp",
+          any(r["kind"] == "constant_pool_string" and r["value"] == "demo-payload"
+              and r["owner"] == "me/demo/App" and r["string_kind"] == "string_literal"
+              for r in strings28), str(strings28))
+    mjt.add_entry(h28, "notice.txt", b"sdk-resource-probe")
+    resource28 = mjt.search(h28, "strings", "sdk-resource")
+    check("search strings resource union",
+          any(r["kind"] == "resource_string" and r["resource_uri"] == "notice.txt"
+              and r["value"] == "sdk-resource-probe" for r in resource28), str(resource28))
+    # owner 作用域：DB-only（引擎资源串半边在作用域场景本就不出）。
+    check("search strings scoped db-only",
+          mjt.search(h28, "strings", "sdk-resource", owner="me/demo/App") == [],
+          "scoped half")
+    to28 = mjt.xref(h28, "method", "me/demo/Crypto", "decode",
+                    "(II)Ljava/lang/String;")
+    # decode 唯一调用方 = App.main——decode 本体 invokestatic 的是解密器 dec
+    # （不自调，CI 实证钉死；勿再凭体感写双行）。
+    check("xref to method",
+          len(to28) == 1 and to28[0]["source"]["class"] == "me/demo/App"
+          and to28[0]["source"]["method"] == "main"
+          and to28[0]["target"] == "me/demo/Crypto.decode(II)Ljava/lang/String;"
+          and to28[0]["kind"] == "direct"
+          and to28[0]["source"]["instruction_index"] >= 0, str(to28))
+    # 反向覆盖：解密器 dec 的调用方 = Crypto.decode 本体（同 jar 第二样本）。
+    dec28 = mjt.xref(h28, "method", "me/demo/Crypto", "dec",
+                     "(II)Ljava/lang/String;")
+    check("xref to method decryptor",
+          len(dec28) == 1 and dec28[0]["source"]["class"] == "me/demo/Crypto"
+          and dec28[0]["source"]["method"] == "decode"
+          and dec28[0]["target"] == "me/demo/Crypto.dec(II)Ljava/lang/String;",
+          str(dec28))
+    from28 = mjt.xref(h28, "method", "me/demo/App", "main",
+                      "([Ljava/lang/String;)V", direction="from")
+    targets28 = {r["target"] for r in from28}
+    check("xref from method callees",
+          len(from28) == 2
+          and "me/demo/Crypto.decode(II)Ljava/lang/String;" in targets28
+          and "java/io/PrintStream.println(Ljava/lang/String;)V" in targets28, str(from28))
+    toc28 = mjt.xref(h28, "class", "me/demo/Crypto")
+    # Type 行三处：App.main 的 decode 直调、Crypto.decode 的 dec 直调（owner
+    # 同类，非自调）、Crypto.guarded 的 wrap 直调——三条 invoke 家族边各落一条
+    # owner 类引用。
+    check("xref to class",
+          len(toc28) == 3 and all(r["kind"] == "type" and r["target"] == "me/demo/Crypto"
+                                  for r in toc28), str(toc28))
+    backfill28 = mjt.xref(h28, "method", "me/demo/Crypto", "decode")
+    check("xref descriptor backfill",
+          len(backfill28) == 1
+          and backfill28[0]["source"]["class"] == "me/demo/App"
+          and all(r["target"] == "me/demo/Crypto.decode(II)Ljava/lang/String;"
+                  for r in backfill28), str(backfill28))
+    try:
+        mjt.search(h28, "instructions", "x")
+        check("search bad kind", False, "no exception")
+    except ValueError as e:
+        check("search bad kind", "kind must be" in str(e), str(e))
+    try:
+        mjt.search(h28, "numbers", "1", match_mode="prefix")
+        check("search numbers match_mode", False, "no exception")
+    except ValueError as e:
+        check("search numbers match_mode", "match_mode" in str(e), str(e))
+    try:
+        mjt.xref(h28, "field", "me/demo/Crypto", "counter", direction="from")
+        check("xref from field", False, "no exception")
+    except ValueError as e:
+        check("xref from field", "direction=from" in str(e), str(e))
+    h28_dead = h28
+    mjt.close_container(h28)
+    try:
+        mjt.search(h28_dead, "classes", "me/demo")
+        check("search stale handle", False, "no exception")
+    except KeyError:
+        check("search stale handle", True, "")
+
+    # ── 29. hierarchy 层次闭包面（analysis.db DB-only，无引擎回落） ──
+    # 四档（super_chain/direct_subclasses/all_subclasses/implementors）+ 分页
+    # 窗口 + 错误面 fail-closed。闭包只吃类头事实（super/interfaces）——demo
+    # jar 原生层次只有 Api 接口 + Color implements Api，树面改写 super/
+    # interfaces 造 extends 链，flush 落账后即时可见（新鲜 ingest）；脏树
+    # 不参与（未 flush 的类头改写查询不见）。
+    p29, h29 = fresh("hier")
+    mjt.class_set_super((h29, "me/demo/App"), "me/demo/Crypto")
+    mjt.class_set_interfaces((h29, "me/demo/Crypto"), ["me/demo/Api"])
+    mjt.flush(h29, compute_frames=False)
+    chain29 = mjt.hierarchy(h29, "super_chain", "me/demo/App")
+    check("hierarchy super chain",
+          [(r["class"], r["resource_uri"]) for r in chain29]
+          == [("me/demo/App", "me/demo/App.class"),
+              ("me/demo/Crypto", "me/demo/Crypto.class"),
+              ("java/lang/Object", "")],
+          str(chain29))
+    direct29 = mjt.hierarchy(h29, "direct_subclasses", "me/demo/Crypto")
+    check("hierarchy direct subclasses",
+          [r["class"] for r in direct29] == ["me/demo/App"], str(direct29))
+    all29 = mjt.hierarchy(h29, "all_subclasses", "me/demo/Crypto")
+    check("hierarchy all subclasses",
+          [r["class"] for r in all29] == ["me/demo/App"], str(all29))
+    impl29 = mjt.hierarchy(h29, "implementors", "me/demo/Api")
+    # 声明方 Color/Crypto 之外，App 也在列：本阶段 class_set_super 造的
+    # App→Crypto 链让 App 成为实现者后代——mjbase implementors 闭包含
+    # 实现者全部后代（CI 实证钉死）。
+    check("hierarchy implementors",
+          [(r["class"], r["resource_uri"]) for r in impl29]
+          == [("me/demo/App", "me/demo/App.class"),
+              ("me/demo/Color", "me/demo/Color.class"),
+              ("me/demo/Crypto", "me/demo/Crypto.class")],
+          str(impl29))
+    # 脏树不参与：未 flush 的类头改写（App super → Util）不进查询口径。
+    mjt.class_set_super((h29, "me/demo/App"), "me/demo/Util")
+    check("hierarchy dirty tree excluded",
+          [r["class"] for r in mjt.hierarchy(h29, "super_chain", "me/demo/App")]
+          == ["me/demo/App", "me/demo/Crypto", "java/lang/Object"],
+          "stale super visible")
+    # 分页窗口（仅闭包两方向）：各页 offset 升序拼接 = 全量；超闭包空页；
+    # limit=0 空页。
+    paged29 = (mjt.hierarchy(h29, "implementors", "me/demo/Api", limit=2, offset=0)
+               + mjt.hierarchy(h29, "implementors", "me/demo/Api", limit=2, offset=2))
+    check("hierarchy paged concat",
+          [r["class"] for r in paged29] == [r["class"] for r in impl29]
+          and mjt.hierarchy(h29, "implementors", "me/demo/Api", limit=1, offset=5) == []
+          and mjt.hierarchy(h29, "implementors", "me/demo/Api", limit=0, offset=0) == [],
+          str(paged29))
+    # 错误面：kind 词表外 / 起点（内部名）未登记 / 分页位错位 / 负值窗口走库
+    # Invalid（RuntimeError）。
+    try:
+        mjt.hierarchy(h29, "ancestors", "me/demo/App")
+        check("hierarchy bad kind", False, "no exception")
+    except ValueError as e:
+        check("hierarchy bad kind", "kind must be" in str(e), str(e))
+    try:
+        mjt.hierarchy(h29, "super_chain", "me/demo/Nope")
+        check("hierarchy unknown class", False, "no exception")
+    except ValueError as e:
+        check("hierarchy unknown class", "not registered" in str(e), str(e))
+    try:
+        mjt.hierarchy(h29, "super_chain", "")
+        check("hierarchy empty query", False, "no exception")
+    except ValueError as e:
+        check("hierarchy empty query", "required" in str(e), str(e))
+    try:
+        mjt.hierarchy(h29, "all_subclasses", "me/demo/Crypto", limit=1)
+        check("hierarchy half window", False, "no exception")
+    except ValueError as e:
+        check("hierarchy half window", "together" in str(e), str(e))
+    try:
+        mjt.hierarchy(h29, "super_chain", "me/demo/App", limit=1, offset=0)
+        check("hierarchy chain paged", False, "no exception")
+    except ValueError as e:
+        check("hierarchy chain paged", "does not take limit/offset" in str(e), str(e))
+    try:
+        mjt.hierarchy(h29, "all_subclasses", "me/demo/Crypto", limit=-1, offset=0)
+        check("hierarchy negative window", False, "no exception")
+    except RuntimeError as e:
+        check("hierarchy negative window", "page limit" in str(e), str(e))
 
     if fallback_tmp is not None:
         import shutil
