@@ -7,7 +7,9 @@
 #include <utility>
 
 #include "libca/crypto/sha256.hpp"
+#include "jbc/ir/units.hpp"
 #include "mjbase/project/entry_shape.hpp"
+#include "constant_scan.hpp"
 #include "reference_scan.hpp"
 #include "workspace.hpp"
 
@@ -294,6 +296,67 @@ ca::Result<AnalysisIngestStats, AnalysisIngestError> ingestIntoAnalysisDb(
     auto replaced    = db.replaceReferences(batchId, std::move(records));
     if (replaced.is_err()) {
         return ca::core::Err(databaseError(std::move(replaced).unwrap_err()));
+    }
+
+    //-- 常量事实面（cp_strings / number_literals，mjbase schema v12）-----------
+    // 逐类重读字节建 jbc 会话（引擎 sessionOf 同形输入），抽取层与引擎搜索/
+    // 编辑同步同一事实源。整库走查攒 DbClassConstantFaces，走查收尾后单次
+    // replaceConstantFaces 整库单事务重建（mjbase 0.0.29 整库入口）——
+    // 逐类/逐方法切片调用各自开一事务，windows 上每事务 WAL fsync（fat 夹具
+    // ≈ 4.4 万次调用）实证悬崖由此消除。批次锚与 replaceReferences 同批：
+    // 每类 (2, class_id)、每个出现的方法 (3, member_id)（mjbase 整库入口
+    // 合批落锚，INSERT OR IGNORE 幂等）；增量编辑仍走逐切片入口（edit_sync）。
+    std::vector<mjbase::project::DbClassConstantFaces> classFaces;
+    for (const ClassInfo& info : classList) {
+        const auto entry = entryIdByPath.find(info.resourceUri.to_std_string());
+        if (entry == entryIdByPath.end()) continue;
+        auto content = workspace.readResource(info.resourceUri.ref());
+        if (content.is_err()) {
+            return ca::core::Err(workspaceError(std::move(content).unwrap_err()));
+        }
+        auto bytes = std::move(content).unwrap().bytes;
+        auto opened = jbc::ir::makeSessionFromBytes(jbc::core::ByteView(bytes));
+        if (opened.is_err()) continue;   // 引擎搜索同款宽容：畸形 class 跳过
+        auto held = std::move(opened).unwrap();
+
+        auto found = db.findClass(utf8Ref(info.internalName.to_std_string()));
+        if (found.is_err()) {
+            return ca::core::Err(databaseError(std::move(found).unwrap_err()));
+        }
+        auto classRow = std::move(found).unwrap();
+        if (!classRow.has_value()) continue;   // 未登记类（防御）：开期导入幂等重跑兜底
+
+        mjbase::project::DbClassConstantFaces faces;
+        faces.classId    = classRow->classId;
+        faces.cpStrings  = cpStringRecords(held->backing());
+        faces.cpNumbers  = cpNumberRecords(held->backing());
+        stats.constantStrings += faces.cpStrings.size();
+        stats.constantNumbers += faces.cpNumbers.size();
+
+        auto members = db.listMembers(utf8Ref(info.internalName.to_std_string()));
+        if (members.is_err()) {
+            return ca::core::Err(databaseError(std::move(members).unwrap_err()));
+        }
+        std::map<std::pair<std::string, std::string>, ca::i64> methodIds;
+        for (const mjbase::project::DbMemberInfo& row : std::move(members).unwrap()) {
+            if (row.kind != mjbase::project::DbMemberKind::Method) continue;
+            methodIds[{row.name.to_std_string(), row.descriptor.to_std_string()}] = row.memberId;
+        }
+        for (auto& slice : methodNumberSlices(*held)) {
+            const auto id = methodIds.find({slice.name, slice.descriptor});
+            if (id == methodIds.end()) continue;   // 成员行缺席（防御）：类事实已随批登记，重跑自愈
+            mjbase::project::DbMemberNumberSlices memberNumbers;
+            memberNumbers.memberId = id->second;
+            memberNumbers.records  = std::move(slice.records);
+            stats.constantNumbers += memberNumbers.records.size();
+            faces.memberNumbers.push_back(std::move(memberNumbers));
+        }
+        classFaces.push_back(std::move(faces));
+    }
+
+    auto replacedFaces = db.replaceConstantFaces(batchId, std::move(classFaces));
+    if (replacedFaces.is_err()) {
+        return ca::core::Err(databaseError(std::move(replacedFaces).unwrap_err()));
     }
 
     //-- 批次收尾：计数从导入统计回填（注册表不核对，对账由消费方负责） ------

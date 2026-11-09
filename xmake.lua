@@ -207,7 +207,21 @@ includes("xmake/libca_rules.lua")
 -- ingestClasses 同 (2, class_id)。消费方 = 编辑增量同步 analysis_edit_sync
 -- 的逐类引用切片写入（commit/undo/redo 后类事实/条目锚/引用切片追平工作
 -- 副本，search kind=classes DB-first 解除干净会话守卫）。
-add_requires("mjbase 0.0.26")
+-- 0.0.26 = analysis_db 成员签名面（PR #206）：members 末位追加 signature 列
+-- （泛型签名原文，无签名空串），DbMemberInput 携带、成员 upsert 覆写。消费方
+-- = search kind=members signature 面 DB-first（ingest/edit_sync 随类事实落列）。
+-- 0.0.27 = analysis_db 常量事实面（schema v12）：cp_strings（类常量池字符串，
+-- facet 由生产方按形状预分）与 number_literals（常量池 + 方法体数值字面量，
+-- 值文本与整型值/浮点位型收窄键随行）两表，查询面 searchStringsPaged /
+-- searchNumbers，切片替换面 replaceCpStringsFromClass / replaceNumbersFromMember /
+-- replaceCpNumbersFromClass。消费方 = search kind=strings / kind=numbers
+-- DB-first 接线（ingest/edit_sync 常量切片入库）。
+-- 0.0.28 = number_literals 成员切片 DELETE 部分索引性能修复（mjbase #214）。
+-- 0.0.29 = analysis_db 常量事实面整库单事务入口 replaceConstantFaces（mjbase
+-- #215）：一次事务整库替换 cp_strings + number_literals，锚纪律同逐切片入口
+-- 合批落。消费方 = ingest 整库导入单调用切换（windows 每事务 fsync 的 4.4 万
+-- 逐切片事务悬崖修复；edit_sync 增量编辑仍走逐切片入口）。
+add_requires("mjbase 0.0.29")
 
 includes("test_helper")
 includes("mjt")
