@@ -38,8 +38,8 @@ std::string utf8(ca::str::Utf16StringRef value)
 
 std::string lowercased(const std::string& value)
 {
-    //折叠单源收编 libca StringUtil（ASCII tolower；前实现未做 unsigned char
-    //中转——高位字节为负时直接传 ::tolower 是 UB，收编顺带修掉）。
+    //折叠单源收编 libca StringUtil（ASCII tolower；与全仓各处旧实现逐字节
+    //同语义——旧实现均已是 unsigned char 中转）。
     return ca::str::StringUtil::to_lower_case(value);
 }
 

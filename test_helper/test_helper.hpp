@@ -86,7 +86,7 @@ inline std::filesystem::path getTempOutPath(const std::string& filename)
 
 ///一次性 sqlite（analysis.mjdb 族）库文件路径：getTempOutPath 同名路径先清场
 ///（主文件 + -wal/-shm 伴生）再返回，保证每次调用拿到"全新空库"。父目录
-///create_directories 兜底（temp_out_path 只保证 out_root 本身）。此前
+///create_directories 兜底（对现行纯文件名调用实为双保险）。此前
 ///analysis_*_test 各持一份逐字拷贝（census/ingest/edit/edit_sync/heal 共五
 ///份），收编到此。
 inline std::filesystem::path freshDbPath(const std::string& filename)
