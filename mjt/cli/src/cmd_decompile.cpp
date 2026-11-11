@@ -14,12 +14,12 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
-#include <cctype>
 #include <filesystem>
 #include <fstream>
 #include <string>
 #include <vector>
 
+#include "libca/str/string_util.hpp"
 #include "libca/str/utf16_string.hpp"
 #include "libca/str/utf8_string.hpp"
 
@@ -169,10 +169,8 @@ bool isClassEntryName(const std::string& canonical)
 bool isZipOutputPath(const std::string& outputPath)
 {
     const auto path = fs::u8path(outputPath);
-    auto       ext  = path.extension().u8string();
-    for (auto& character : ext)
-        character = static_cast<char>(std::tolower(static_cast<unsigned char>(character)));
-    return ext == ".zip";
+    auto       ext = path.extension().u8string();
+    return ca::str::StringUtil::to_lower_case(ext) == ".zip";
 }
 
 /// 共享层 DecompileRequest 组装（单类与批量公共字段）。
@@ -261,10 +259,7 @@ ca::Result<ca::usize, DecompileError> stageJarWithoutEntries(
 
 ca::Result<DecompilerKind, DecompileError> parseDecompilerBackendName(const std::string& name)
 {
-    std::string lowered;
-    lowered.reserve(name.size());
-    for (const char character : name)
-        lowered.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(character))));
+    const std::string lowered = ca::str::StringUtil::to_lower_case(name);
     if (lowered == "cfr") return ca::Ok(DecompilerKind::Cfr);
     if (lowered == "vineflower") return ca::Ok(DecompilerKind::Vineflower);
     if (lowered == "jcdc") return ca::Ok(DecompilerKind::Jcdc);

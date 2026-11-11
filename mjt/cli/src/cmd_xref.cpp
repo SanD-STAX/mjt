@@ -10,11 +10,11 @@
 #include "commands.hpp"
 
 #include <algorithm>
-#include <cctype>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "libca/str/string_util.hpp"
 #include "shared/i18n_errors.hpp"
 #include "shared/json_util.hpp"
 #include "shared/output_sink.hpp"
@@ -40,15 +40,6 @@ XrefError xrefError(XrefError::Kind kind, const char* key,
     error.kind    = kind;
     error.message = shared::trfStr(key, args);
     return error;
-}
-
-/// ASCII 小写归一（parseDecompilerBackendName 同款，后端名/方向名共用口径）。
-std::string asciiLower(const std::string& value)
-{
-    std::string out = value;
-    for (auto& character : out)
-        character = static_cast<char>(std::tolower(static_cast<unsigned char>(character)));
-    return out;
 }
 
 /// 成员选择器解析："name" 或 "name(desc)"（desc = 自首个 '(' 起的完整后缀，
@@ -112,7 +103,8 @@ ca::Result<XrefReport, XrefError> collectXref(const std::string& jarPath,
                                               const std::string& member,
                                               const std::string& direction, ca::i64 limit)
 {
-    const std::string normalizedDirection = asciiLower(direction);
+    const std::string normalizedDirection =
+        ca::str::StringUtil::to_lower_case(direction);
     if (normalizedDirection != "to" && normalizedDirection != "from" &&
         normalizedDirection != "both")
         return ca::Err(xrefError(XrefError::Kind::InvalidArgument,

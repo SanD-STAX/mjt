@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "limits.hpp"
+#include "libca/str/string_util.hpp"
 #include "shared/status_convert.hpp"
 #include "workspace/constant_scan.hpp"
 
@@ -37,14 +38,9 @@ std::string utf8(ca::str::Utf16StringRef value)
 
 std::string lowercased(const std::string& value)
 {
-    auto lowered = value;
-    std::transform(lowered.begin(),
-                   lowered.end(),
-                   lowered.begin(),
-                   [](unsigned char character) {
-                       return static_cast<char>(std::tolower(character));
-                   });
-    return lowered;
+    //折叠单源收编 libca StringUtil（ASCII tolower；前实现未做 unsigned char
+    //中转——高位字节为负时直接传 ::tolower 是 UB，收编顺带修掉）。
+    return ca::str::StringUtil::to_lower_case(value);
 }
 
 Json statusJson(const ca::Status& status)

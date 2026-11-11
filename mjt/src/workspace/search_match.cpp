@@ -1,7 +1,6 @@
 #include "search_match.hpp"
 
-#include <algorithm>
-#include <cctype>
+#include "libca/str/string_util.hpp"
 
 namespace mjt::workspace {
 namespace {
@@ -18,10 +17,10 @@ WorkspaceErrorInfo matchError(WorkspaceError code, const std::string& operation,
 
 std::string lowercase(std::string value)
 {
-    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char character) {
-        return static_cast<char>(std::tolower(character));
-    });
-    return value;
+    //折叠单源收编 libca StringUtil（ASCII tolower，unsigned char 中转语义同
+    //前实现）；保留 API 形态——引擎/DB 两侧匹配面的文档化契约点
+    //（search_match.hpp，SQLite LOWER 只折 ASCII 同口径）。
+    return ca::str::StringUtil::to_lower_case(value);
 }
 
 bool matchesText(const std::string& value, const std::string& query,

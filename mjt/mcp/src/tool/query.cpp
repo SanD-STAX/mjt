@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <deque>
-#include <cctype>
 #include <exception>
 #include <filesystem>
 #include <fstream>
@@ -63,15 +62,8 @@ bool makeResourceTextMatcher(const Json& arguments,
     const auto query = arguments.value("query", std::string{});
     const auto mode = arguments.value("match_mode", std::string{"contains"});
     const bool caseSensitive = arguments.value("case_sensitive", false);
-    const auto toLower = [](const std::string& value) {
-        std::string lowered;
-        lowered.reserve(value.size());
-        for (const char character : value)
-            lowered.push_back(
-                static_cast<char>(std::tolower(static_cast<unsigned char>(character))));
-        return lowered;
-    };
-    const auto loweredQuery = toLower(query);
+    //小写折叠走 detail::lowercased 单源（libca StringUtil，ASCII 口径）。
+    const auto loweredQuery = detail::lowercased(query);
     std::optional<std::regex> compiled;
     if (mode == "regex") {
         try {
@@ -84,16 +76,16 @@ bool makeResourceTextMatcher(const Json& arguments,
             return false;
         }
     }
-    out = [query, mode, caseSensitive, loweredQuery, compiled = std::move(compiled), toLower](
+    out = [query, mode, caseSensitive, loweredQuery, compiled = std::move(compiled)](
               const std::string& text) {
         if (mode == "exact") return text == query;
         if (mode == "prefix") {
             if (caseSensitive) return text.rfind(query, 0) == 0;
-            return toLower(text).rfind(loweredQuery, 0) == 0;
+            return detail::lowercased(text).rfind(loweredQuery, 0) == 0;
         }
         if (compiled) return std::regex_search(text, *compiled);
         if (caseSensitive) return text.find(query) != std::string::npos;
-        return toLower(text).find(loweredQuery) != std::string::npos;
+        return detail::lowercased(text).find(loweredQuery) != std::string::npos;
     };
     return true;
 }
@@ -211,15 +203,7 @@ std::optional<Json> McpToolService::callWorkspaceQueryTool(
             const auto query  = arguments.value("query", std::string{});
             const auto mode   = arguments.value("match_mode", std::string{"contains"});
             const bool caseSensitive = arguments.value("case_sensitive", false);
-            const auto toLower = [](const std::string& value) {
-                std::string lowered;
-                lowered.reserve(value.size());
-                for (const char character : value)
-                    lowered.push_back(static_cast<char>(
-                        std::tolower(static_cast<unsigned char>(character))));
-                return lowered;
-            };
-            const auto haystack = caseSensitive ? query : toLower(query);
+            const auto haystack = caseSensitive ? query : detail::lowercased(query);
             std::optional<std::regex> compiled;
             if (mode == "regex") {
                 try {
@@ -237,11 +221,11 @@ std::optional<Json> McpToolService::callWorkspaceQueryTool(
                 //prefix 档：role 过滤路径与主路径同一语义。
                 if (mode == "prefix") {
                     if (caseSensitive) return text.rfind(query, 0) == 0;
-                    return toLower(text).rfind(haystack, 0) == 0;
+                    return detail::lowercased(text).rfind(haystack, 0) == 0;
                 }
                 if (compiled) return std::regex_search(text, *compiled);
                 if (caseSensitive) return text.find(query) != std::string::npos;
-                const auto lowered = toLower(text);
+                const auto lowered = detail::lowercased(text);
                 return lowered.find(haystack) != std::string::npos;
             };
             //资源字节与类型名（workspace 内部 bytesOf/resourceTypeName 的等位
