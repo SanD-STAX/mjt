@@ -165,15 +165,8 @@ std::filesystem::path writeFixtureJar()
     return path;
 }
 
-std::filesystem::path freshDbPath(const char* stem)
-{
-    const auto path = test::getTempOutPath(stem);
-    std::error_code ec;
-    std::filesystem::remove_all(path, ec);
-    std::filesystem::remove_all(path.string() + "-wal", ec);
-    std::filesystem::remove_all(path.string() + "-shm", ec);
-    return path;
-}
+// freshDbPath 用 test_helper 单源（test::freshDbPath，主/-wal/-shm 三连清）。
+using test::freshDbPath;
 
 mjbase::project::AnalysisDb openOrDie(const std::filesystem::path& path)
 {

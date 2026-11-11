@@ -98,14 +98,11 @@ std::filesystem::path writeFixtureJar()
     return path;
 }
 
+// 清场逻辑用 test_helper 单源（test::freshDbPath：主/-wal/-shm 三连清 + 父目录
+// 兜底），本文件只钉文件名。
 std::filesystem::path freshDbPath()
 {
-    const auto path = test::getTempOutPath("mjt_analysis_heal.mjdb");
-    std::error_code ec;
-    std::filesystem::remove_all(path, ec);
-    std::filesystem::remove_all(path.string() + "-wal", ec);
-    std::filesystem::remove_all(path.string() + "-shm", ec);
-    return path;
+    return test::freshDbPath("mjt_analysis_heal.mjdb");
 }
 
 mjbase::project::AnalysisDb openOrDie(const std::filesystem::path& path,

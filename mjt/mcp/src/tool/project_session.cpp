@@ -47,9 +47,8 @@ namespace {
 
 namespace fs = std::filesystem;
 
-///bundle 内分析库的固定文件名（与 mask_exit.cpp 的 kMaskAnalysisDbFileName
-///同值：工程 bundle 布局约定 analysis.mjdb）。
-constexpr const char* kAnalysisDbFileName = "analysis.mjdb";
+// bundle 内分析库的固定文件名：单源在 project_session.hpp
+// （kAnalysisDbFileName，mask_exit 同款消费）。
 
 ///分析库错误 → ca::Status（打开/写入面按内部错误回报；schema 违约按数据问题）。
 ca::Status analysisDbStatus(mjbase::project::AnalysisDbError error, const char* operation)

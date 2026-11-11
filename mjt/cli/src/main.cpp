@@ -10,7 +10,6 @@
 ///
 /// 文案：i18n 表 = mjt_shared（共享层错误文案）+ 本 CLI（mjt.cli.*），语言
 /// 由 MJT_LANG 选择（未设置或未注册时落 en_US）。
-#include <cctype>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -19,6 +18,7 @@
 #include <string>
 
 #include "libca/opt/opt.hpp"
+#include "libca/str/string_util.hpp"
 
 #include "i18n_mjt_shared_translations.generated.hpp"
 #include "i18n_mjt_cli_core_translations.generated.hpp"
@@ -217,9 +217,7 @@ bool isJavaOutputPath(const std::string& path)
 {
     const std::filesystem::path parsed = std::filesystem::u8path(path);
     if (parsed.extension().string().size() != 5) return false;
-    std::string lowered = parsed.extension().string();
-    for (auto& character : lowered)
-        character = static_cast<char>(std::tolower(static_cast<unsigned char>(character)));
+    const std::string lowered = ca::str::StringUtil::to_lower_case(parsed.extension().string());
     return lowered == ".java";
 }
 

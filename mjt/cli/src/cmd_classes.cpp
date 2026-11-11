@@ -10,12 +10,12 @@
 #include "commands.hpp"
 
 #include <algorithm>
-#include <cctype>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "census_support.hpp"
+#include "libca/str/string_util.hpp"
 #include "mjbase/project/analysis_db.hpp"
 #include "mjbase/project/class_kind.hpp"
 #include "mjbase/project/library_origin.hpp"
@@ -35,15 +35,6 @@ ClassesError classesError(ClassesError::Kind kind, const char* key,
     error.kind    = kind;
     error.message = shared::trfStr(key, args);
     return error;
-}
-
-/// ASCII 小写归一（xref 方向名同款口径：--kind / --origin 值大小写不敏感）。
-std::string asciiLower(const std::string& value)
-{
-    std::string out = value;
-    for (auto& character : out)
-        character = static_cast<char>(std::tolower(static_cast<unsigned char>(character)));
-    return out;
 }
 
 /// --kind 合法值集合（classKindName 稳定名；与 census kind 列同文）。
@@ -72,8 +63,8 @@ ca::Result<ClassesReport, ClassesError> collectClasses(const std::string& jarPat
                                                        const std::string& originFilter,
                                                        ca::i64 limit)
 {
-    const std::string kind = asciiLower(kindFilter);
-    const std::string origin = asciiLower(originFilter);
+    const std::string kind   = ca::str::StringUtil::to_lower_case(kindFilter);
+    const std::string origin = ca::str::StringUtil::to_lower_case(originFilter);
     if (!kind.empty() && !isKnownClassKind(kind))
         return ca::Err(classesError(ClassesError::Kind::InvalidArgument,
                                     "mjt.cli.classes.err.invalid_kind", {kindFilter}));

@@ -1,11 +1,10 @@
 #include "jar_context.hpp"
 
-#include <algorithm>
-#include <cctype>
 #include <cstdio>
 #include <filesystem>
 
 #include "libca/fs/file_util.hpp"
+#include "libca/str/string_util.hpp"
 #include "libca/i18n/i18n.hpp"
 #include "mjbase/jar/jar_reader.hpp"
 #include "mjbase/model/resource_helper.hpp"
@@ -28,10 +27,7 @@ bool isClassFilePath(const std::string& path)
     //显式 u8path 不经 ACP 隐式窄转码（u8path 清扫；扩展名比较为 ASCII 字面量，
     //零漂移）。
     const std::filesystem::path fsPath = std::filesystem::u8path(path);
-    auto                  ext = fsPath.extension().string();
-    std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char ch) {
-        return static_cast<char>(std::tolower(ch));
-    });
+    const auto ext = ca::str::StringUtil::to_lower_case(fsPath.extension().string());
     return ext == ".class";
 }
 

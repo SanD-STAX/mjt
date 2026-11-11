@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <atomic>
-#include <cctype>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
@@ -13,6 +12,7 @@
 #include <vector>
 
 #include "libca/process/subprocess.hpp"
+#include "libca/str/string_util.hpp"
 #include "libca/thread/thread.hpp"
 #include "libca/zip/file.hpp"
 
@@ -154,15 +154,6 @@ std::vector<std::string> decompilerHomeCandidates(DecompilerKind kind)
 #endif
 }
 
-std::string asciiLower(std::string text)
-{
-    for (auto& character : text) {
-        character = static_cast<char>(
-            std::tolower(static_cast<unsigned char>(character)));
-    }
-    return text;
-}
-
 //单目录内按「前缀 + .jar」探测（ASCII 小写比较，文件名字典序取首个命中）。
 //N5 守卫：-sources.jar / -javadoc.jar 是源码/文档附属 jar，不是可运行的反编译器；
 //前缀扫描对它们同样命中（如 vineflower-sources.jar）且 '-' 字典序靠前时会误选，
@@ -185,7 +176,7 @@ std::string probeDecompilerJarDirectory(const fs::path& directory, DecompilerKin
          it.increment(error)) {
         if (!it->is_regular_file(error)) continue;
         const auto name = it->path().filename().string();
-        const auto lower = asciiLower(name);
+        const auto lower = ca::str::StringUtil::to_lower_case(name);
         if (!(lower.size() >= prefix.size() + 4 && lower.rfind(prefix, 0) == 0 &&
               lower.compare(lower.size() - 4, 4, ".jar") == 0)) {
             continue;
@@ -232,7 +223,7 @@ std::string probeDecompilerExecutableDirectory(const fs::path& directory, Decomp
          it.increment(error)) {
         if (!it->is_regular_file(error)) continue;
         const auto name = it->path().filename().string();
-        const auto lower = asciiLower(name);
+        const auto lower = ca::str::StringUtil::to_lower_case(name);
         //前缀 "jcdc" 且至少还有一字符（纯 "jcdc" 不是带版本的发布件文件名，
         //归第 3 层固定名候选）。
         if (lower.size() <= 4 || lower.rfind("jcdc", 0) != 0) continue;
@@ -1061,12 +1052,11 @@ ca::StatusOr<DecompileResult> decompile(const DecompileRequest& request)
                                          {request.inputPath}));
     }
     //扩展名大小写不敏感（与 jar remap 的 JarUtil::isJarFile 口径一致，.JAR/.Class 可用）。
+    //折叠走 StringUtil 单源（ASCII tolower，unsigned char 中转语义同前实现）。
     auto equalsNoCase = [](const std::string& s, const char* lower) {
         if (s.size() != std::strlen(lower)) return false;
-        for (std::size_t i = 0; i < s.size(); ++i) {
-            if (std::tolower(static_cast<unsigned char>(s[i])) != lower[i]) return false;
-        }
-        return true;
+        const auto folded = ca::str::StringUtil::to_lower_case(s);
+        return folded == lower;
     };
     const auto inputExt  = input.extension().string();
     const auto outputExt = output.extension().string();

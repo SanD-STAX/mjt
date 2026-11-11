@@ -9,10 +9,10 @@
 #include "commands.hpp"
 
 #include <algorithm>
-#include <cctype>
 #include <string>
 #include <vector>
 
+#include "libca/str/string_util.hpp"
 #include "mjbase/mapping/intermediate_mapping.hpp"
 #include "mjbase/mapping/mapping_format_registry.hpp"
 #include "shared/file_io.hpp"
@@ -33,31 +33,19 @@ const char* mappingErrorText(mjbase::mapping::MappingError error)
     return "mapping failure";
 }
 
-/// 比较名归一：小写化（ASCII；格式名全是 ASCII）。
-std::string folded(const std::string& name)
-{
-    std::string out;
-    out.reserve(name.size());
-    for (char ch : name) {
-        out.push_back(static_cast<char>(
-            std::tolower(static_cast<unsigned char>(ch))));
-    }
-    return out;
-}
-
 }   // namespace
 
 ca::Result<std::string, MappingError> resolveMappingFormatName(const std::string& name)
 {
     const auto registry = mjbase::mapping::MappingFormatRegistry::withStandardFormats();
-    const auto foldedName = folded(name);
+    const auto foldedName = ca::str::StringUtil::to_lower_case(name);
 
     // 大小写不敏感匹配注册名；注册表对同一实现保留了多别名（如 "Tiny-V2"/
     // "Tiny-v2"、"Proguard"/"ProGuard"），折叠后同名命中取 formatNames() 确定
     // 序第一个（canonical 名），未注册名 fail-loud。
     std::string canonical;
     for (const auto registered : registry.formatNames()) {
-        if (folded(registered.to_std_string()) == foldedName) {
+        if (ca::str::StringUtil::to_lower_case(registered.to_std_string()) == foldedName) {
             canonical = registered.to_std_string();
             break;
         }

@@ -29,9 +29,6 @@ ca::Status maskDbStatus(mjbase::project::AnalysisDbError error, const char* oper
                          std::string(operation) + ": " + error.message.to_std_string());
 }
 
-///@brief bundle 内分析库的固定文件名（工程 bundle 布局约定：analysis.mjdb）。
-constexpr const char* kMaskAnalysisDbFileName = "analysis.mjdb";
-
 }   //namespace
 
 MaskExitState::~MaskExitState() = default;
@@ -46,7 +43,9 @@ ca::Status MaskExitState::ensureLoaded(const std::string& projectDir)
     loadAttempted_ = true;
     projectDir_    = projectDir;
 
-    const auto dbPath = std::filesystem::path(projectDir) / kMaskAnalysisDbFileName;
+    // bundle 内分析库固定文件名走单源（project_session.hpp 的
+    // kAnalysisDbFileName），不再本地持一份同值常数。
+    const auto dbPath = std::filesystem::path(projectDir) / kAnalysisDbFileName;
     std::error_code  ec;
     if (!std::filesystem::is_regular_file(dbPath, ec)) {
         return ca::OkStatus();   ///< 老bundle/未建库：直通（inactive）
