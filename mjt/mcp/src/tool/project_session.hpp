@@ -26,6 +26,12 @@ namespace mjt::mcp {
 
 class MaskExitState;
 
+///@brief bundle 内分析库的固定文件名（工程 bundle 布局约定）。
+///
+///layout 契约的单源：project_session（openProjectSession 打开）与
+///mask_exit（掩蔽面惰性打开）消费同一常数——bundle 布局变化只改这里。
+inline constexpr const char* kAnalysisDbFileName = "analysis.mjdb";
+
 
 ///@brief 一个已打开的分析会话：workspace 实例与其绑定的工程 bundle。
 ///
